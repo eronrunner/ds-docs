@@ -1,0 +1,38 @@
+{
+  "properties": {
+    "ds_name": {
+      "title": "Ds Name",
+      "type": "string"
+    },
+    "ds_type": {
+      "title": "Ds Type",
+      "type": "string"
+    },
+    "ds_host": {
+      "title": "Ds Host",
+      "type": "string"
+    },
+    "ds_port": {
+      "title": "Ds Port",
+      "type": "integer"
+    },
+    "ds_user": {
+      "title": "Ds User",
+      "type": "string"
+    },
+    "ds_password": {
+      "title": "Ds Password",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ds_name",
+    "ds_type",
+    "ds_host",
+    "ds_port",
+    "ds_user",
+    "ds_password"
+  ],
+  "title": "DataSourceInfo",
+  "type": "object"
+}

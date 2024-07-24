@@ -1,0 +1,41 @@
+{
+  "$defs": {
+    "FieldInfo": {
+      "properties": {
+        "field_name": {
+          "title": "Field Name",
+          "type": "string"
+        },
+        "field_type": {
+          "title": "Field Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field_name",
+        "field_type"
+      ],
+      "title": "FieldInfo",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "table_name": {
+      "title": "Table Name",
+      "type": "string"
+    },
+    "table_fields": {
+      "items": {
+        "$ref": "#/$defs/FieldInfo"
+      },
+      "title": "Table Fields",
+      "type": "array"
+    }
+  },
+  "required": [
+    "table_name",
+    "table_fields"
+  ],
+  "title": "TableInfo",
+  "type": "object"
+}

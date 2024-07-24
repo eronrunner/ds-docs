@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "DataSourceInfo": {
+      "properties": {
+        "ds_name": {
+          "title": "Ds Name",
+          "type": "string"
+        },
+        "ds_type": {
+          "title": "Ds Type",
+          "type": "string"
+        },
+        "ds_host": {
+          "title": "Ds Host",
+          "type": "string"
+        },
+        "ds_port": {
+          "title": "Ds Port",
+          "type": "integer"
+        },
+        "ds_user": {
+          "title": "Ds User",
+          "type": "string"
+        },
+        "ds_password": {
+          "title": "Ds Password",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ds_name",
+        "ds_type",
+        "ds_host",
+        "ds_port",
+        "ds_user",
+        "ds_password"
+      ],
+      "title": "DataSourceInfo",
+      "type": "object"
+    },
+    "FieldInfo": {
+      "properties": {
+        "field_name": {
+          "title": "Field Name",
+          "type": "string"
+        },
+        "field_type": {
+          "title": "Field Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field_name",
+        "field_type"
+      ],
+      "title": "FieldInfo",
+      "type": "object"
+    },
+    "TableInfo": {
+      "properties": {
+        "table_name": {
+          "title": "Table Name",
+          "type": "string"
+        },
+        "table_fields": {
+          "items": {
+            "$ref": "#/$defs/FieldInfo"
+          },
+          "title": "Table Fields",
+          "type": "array"
+        }
+      },
+      "required": [
+        "table_name",
+        "table_fields"
+      ],
+      "title": "TableInfo",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "ds_info": {
+      "$ref": "#/$defs/DataSourceInfo"
+    },
+    "db_engine": {
+      "title": "Db Engine",
+      "type": "string"
+    },
+    "tables": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TableInfo"
+      },
+      "title": "Tables",
+      "type": "object"
+    }
+  },
+  "required": [
+    "ds_info",
+    "db_engine",
+    "tables"
+  ],
+  "title": "DatasourceDocs",
+  "type": "object"
+}

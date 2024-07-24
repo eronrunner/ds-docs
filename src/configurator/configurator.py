@@ -1,0 +1,195 @@
+
+from src.model.meta import DataSourceInfo, TableInfo, FieldInfo
+
+
+class DatasourceInfoConfigurator:
+    def __init__(
+        self,
+        ds_name=None,
+        ds_type=None,
+        ds_host=None,
+        ds_port=None,
+        ds_user=None,
+        ds_password=None,
+    ):
+        self.ds_name = ds_name
+        self.ds_type = ds_type
+        self.ds_host = ds_host
+        self.ds_port = ds_port
+        self.ds_user = ds_user
+        self.ds_password = ds_password
+
+    def configure(self):
+        return DataSourceInfo(
+            ds_name=self.ds_name,
+            ds_type=self.ds_type,
+            ds_host=self.ds_host,
+            ds_port=self.ds_port,
+            ds_user=self.ds_user,
+            ds_password=self.ds_password,
+        )
+
+    def set_ds_name(self, name: str):
+        self.ds_name = name
+        return self
+
+    def set_ds_type(self, type: str):
+        self.ds_type = type
+        return self
+
+    def set_ds_host(self, host: str):
+        self.ds_host = host
+        return self
+
+    def set_ds_port(self, port: str):
+        self.ds_port = port
+        return self
+
+    def set_ds_user(self, user: str):
+        self.ds_user = user
+        return self
+
+    def set_ds_password(self, password: str):
+        self.ds_password = password
+        return self
+
+
+class TableInfoConfigurator:
+    def __init__(self, table_name=None, table_fields=None):
+        self.table_name = table_name
+        self.table_fields = table_fields
+
+    def configure(self):
+        return TableInfo(table_name=self.table_name, table_fields=self.table_fields)
+
+    def set_table_name(self, name: str):
+        self.table_name = name
+        return self
+
+    def set_table_fields(self, fields: [FieldInfo]):
+        self.table_fields = fields
+        return self
+
+    def add_table_field(self, field: FieldInfo):
+        if self.table_fields:
+            self.table_fields.append(field)
+        else:
+            self.table_fields = [field]
+        return self
+
+
+class FieldInfoConfigurator:
+
+    def __init__(
+        self,
+        field_name=None,
+        field_type=None,
+        field_pattern=None,
+        field_min=None,
+        field_max=None,
+        field_alias=None,
+        field_factory=None,
+        field_gt=None,
+        field_lt=None,
+        field_ge=None,
+        field_le=None,
+        field_decimal_places=None,
+        field_required=None,
+        field_unique=None,
+        field_default_value=None,
+    ):
+        self.field_name = field_name
+        self.field_type = field_type
+        self.field_pattern = field_pattern
+        self.field_min = field_min
+        self.field_max = field_max
+        self.field_alias = field_alias
+        self.field_factory = field_factory
+        self.field_gt = field_gt
+        self.field_lt = field_lt
+        self.field_ge = field_ge
+        self.field_le = field_le
+        self.field_decimal_places = field_decimal_places
+        self.field_required = field_required
+        self.field_unique = field_unique
+        self.field_default_value = field_default_value
+
+    def configure(self):
+        return FieldInfo(
+            field_name=self.field_name,
+            field_type=self.field_type,
+            field_pattern=self.field_pattern,
+            field_min=self.field_min,
+            field_max=self.field_max,
+            field_alias=self.field_alias,
+            field_factory=self.field_factory,
+            field_gt=self.field_gt,
+            field_lt=self.field_lt,
+            field_ge=self.field_ge,
+            field_le=self.field_le,
+            field_decimal_places=self.field_decimal_places,
+            field_required=self.field_required,
+            field_unique=self.field_unique,
+            field_default_value=self.field_default_value,
+        )
+
+    def set_field_name(self, name: str):
+        self.field_name = name
+        return self
+
+    def set_field_type(self, type: str):
+        self.field_type = type
+        return self
+
+    def set_field_pattern(self, pattern: str):
+        self.field_pattern = pattern
+        return self
+
+    def set_field_min(self, min: int):
+        self.field_min = min
+        return self
+
+    def set_field_max(self, max: int):
+        self.field_max = max
+        return self
+
+    def set_field_alias(self, alias: str):
+        self.field_alias = alias
+        return self
+
+    def set_field_factory(self, factory: str):
+        self.field_factory = factory
+        return self
+
+    def set_field_gt(self, gt: float):
+        self.field_gt = gt
+        return self
+
+    def set_field_lt(self, lt: float):
+        self.field_lt = lt
+        return self
+
+    def set_field_ge(self, ge: float):
+        self.field_ge = ge
+        return self
+
+    def set_field_le(self, le: float):
+        self.field_le = le
+        return self
+
+    def set_field_decimal_places(self, decimal_places: int):
+        self.field_decimal_places = decimal_places
+        return self
+
+    def set_field_required(self, required: bool):
+        self.field_required = required
+        return self
+
+    def set_field_unique(self, unique: bool):
+        self.field_unique = unique
+        return self
+
+    def set_field_default_value(self, default_value):
+        self.field_default_value = default_value
+        return self
+

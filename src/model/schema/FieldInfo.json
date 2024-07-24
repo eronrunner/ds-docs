@@ -1,0 +1,18 @@
+{
+  "properties": {
+    "field_name": {
+      "title": "Field Name",
+      "type": "string"
+    },
+    "field_type": {
+      "title": "Field Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "field_name",
+    "field_type"
+  ],
+  "title": "FieldInfo",
+  "type": "object"
+}
