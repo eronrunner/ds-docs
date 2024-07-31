@@ -4,10 +4,12 @@ from functools import wraps, partial
 from typing import Sequence, Tuple, List, Optional, Mapping, Any
 
 import click
+import questionary
 from click import HelpFormatter
+from prompt_toolkit.styles import Style
 
 from src.logger.log import Logger
-from src.model.meta import TableInfo
+from src.model.meta import TableInfo, DATA_SOURCE_TYPES
 
 from pydantic import ValidationError
 from src.configurator.configurator import (
@@ -33,6 +35,22 @@ def set_theme(_theme: 'Theme'):
     theme = _theme
 
 
+from questionary import Style
+
+custom_style_fancy = Style([
+    ('qmark', 'fg:#673ab7 bold'),       # token in front of the question
+    ('question', 'bold'),               # question text
+    ('answer', 'fg:#f44336 bold'),      # submitted answer text behind the question
+    ('pointer', 'fg:#673ab7 bold'),     # pointer used in select and checkbox prompts
+    ('highlighted', 'fg:#673ab7 bold'), # pointed-at choice in select and checkbox prompts
+    ('selected', 'fg:#cc5454'),         # style for a selected item of a checkbox
+    ('separator', 'fg:#cc5454'),        # separator in lists
+    ('instruction', ''),                # user instructions for select, rawselect, checkbox
+    ('text', ''),                       # plain text
+    ('disabled', 'fg:#858585 italic')   # disabled choices for select and checkbox prompts
+])
+
+
 def context_path(func):
 
     @wraps(func)
@@ -44,7 +62,7 @@ def context_path(func):
         rs = func(*args, **kwargs)
         if ctx.invoked_subcommand:
             ctx.obj["path"].append(ctx.invoked_subcommand)
-        click.echo(ctx.obj["theme"].h1("->".join(ctx.obj["path"])))
+        click.echo(theme.h1("->".join(ctx.obj["path"])))
         return rs
 
     return decorator
@@ -225,22 +243,20 @@ def configure_ds(
     while True:
         try:
             data_source_info = data_source_info_configurator.configure()
+            logger.info("Export data source info . . .")
             _export(
                 f"{ctx.obj['output']}/{ctx.obj['namespace']}-datasourceinfo-config.json",
                 data_source_info.model_dump_json(by_alias=True, indent=2),
             )
             return
-        except ValidationError as e:
+        except (ValidationError, ValueError) as e:
+            print(e.errors())
             for err in e.errors():
                 field_name = err["loc"][0]
                 format_name = DATA_SOURCE_INFO_ARGS_MAPPING[field_name].replace(
                     "_", " "
                 ).capitalize()
-                logger.info(theme.h2(f"{format_name}, {err['msg']}"))
-                field_value = click.prompt(theme.h3(f"Enter {format_name}: "), hide_input=field_name in _HIDDEN_FIELDS)
-                data_source_info_configurator.__getattribute__(f"set_{field_name}")(
-                    field_value.strip()
-                )
+                _process_field_errors(data_source_info_configurator, err, field_name, format_name)
 
 
 @run.command("configure-table", cls=CommandColor, help="Configure table")
@@ -254,7 +270,7 @@ def configure_table(ctx, table_name, export=True) -> "TableInfo":
     try:
         ctx.ensure_object(dict)
         table_info_configurator = TableInfoConfigurator()
-        table_info_configurator.set_table_name(table_name).configure()
+        table_info_configurator.set_table_name(table_name)
         # Configure fields
         configured_fields = _configure_fields(ctx, table_info_configurator)
         if configured_fields:
@@ -283,25 +299,63 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
             field_info = field_configurator.configure()
             table_configurator.add_table_field(field_info)
             configured_fields.append(field_info.field_name)
-            add_more = click.prompt(
+            add_more = questionary.confirm(
                 theme.normal("Do you want to add more another field? (y/n)")
-                , default="y"
-            ).strip()
-            if add_more.lower() != "y":
+                , default=True
+            ).ask()
+            if not add_more:
                 break
             field_configurator = FieldInfoConfigurator()
-        except ValidationError as e:
+        except (ValidationError, ValueError) as e:
             for err in e.errors():
                 field_name = err["loc"][0]
                 format_name = field_name.replace("_", " ").capitalize()
-                logger.info(theme.h2(f"{format_name}, {err['msg']}"))
-                field_value = click.prompt(theme.h3(f"Enter {format_name}"))
-                field_configurator.__getattribute__(f"set_{field_name}")(
-                    field_value.strip()
-                )
+                _process_field_errors(field_configurator, err, field_name, format_name)
         except Exception as e:
             logger.error(f"Error: {e}")
     return configured_fields
+
+
+def _process_field_errors(configurator: 'Configurator', err: dict, field_name: str, display_name: str = "") -> Any:
+    choices = configurator.get_choices(field_name)
+    logger.info(theme.h2(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}"))
+    is_hidden = field_name in _HIDDEN_FIELDS
+
+    if len(choices):
+        question = questionary.select(f"Enter {display_name}: ", choices, style=custom_style_fancy)
+    else:
+        if is_hidden:
+            question = questionary.password(f"Enter {display_name}: ")
+        else:
+            question = questionary.text(f"Enter {display_name}: ")
+    if field_type_value:= configurator.__getattribute__("field_type"):
+        if field_type_value == "str":
+
+    configurator.__getattribute__(f"set_{field_name}")(
+        field_value.strip()
+    )
+    return field_value
+
+
+_str_asked_fields = {"field_type", "field_pattern", "field_min", "field_max"}
+_int_asked_fields = ("field_gt", "field_lt", "field_ge", "field_le", "field_decimal_places")
+_default_asked_fields = ("field_alias", "field_factory", "field_required", "field_unique", "field_default_value")
+
+
+def _type_field_questions(configurator, field_name: str, field_type: str):
+    if field_name in _default_asked_fields:
+        return True
+    elif field_type == "text" and field_name in _str_asked_fields:
+        return True
+    elif field_type in ("integer", "float", "datetime") and field_name in _int_asked_fields:
+        if field_name == "field_gt" and configurator.__getattribute__("field_ge") is not None:
+            return False
+        elif field_name == "field_lt" and configurator.__getattribute__("field_le") is not None:
+            return False
+        elif
+        return True
+
+    return False
 
 
 @run.command("configure-tables", cls=CommandColor, help="Configure tables")

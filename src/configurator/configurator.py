@@ -1,8 +1,33 @@
+import datetime
+import typing
+from typing import Any
 
-from src.model.meta import DataSourceInfo, TableInfo, FieldInfo
+from src.model.meta import DataSourceInfo, TableInfo, FieldInfo, Choices, FIELD_TYPES
 
 
-class DatasourceInfoConfigurator:
+class Configurator:
+
+    model: 'BaseModel'
+
+    @classmethod
+    def get_metadata(cls, field_name: str) -> list[Any]:
+        return cls.model.model_fields[field_name].metadata
+
+    @classmethod
+    def get_choices(cls, field_name: str) -> dict[str, Any]:
+        for meta in cls.get_metadata(field_name):
+            if isinstance(meta, Choices):
+                return meta.choices
+        return {}
+
+    def configure(self):
+        raise NotImplementedError('Method not implemented')
+
+
+class DatasourceInfoConfigurator(Configurator):
+
+    model = DataSourceInfo
+
     def __init__(
         self,
         ds_name=None,
@@ -54,7 +79,10 @@ class DatasourceInfoConfigurator:
         return self
 
 
-class TableInfoConfigurator:
+class TableInfoConfigurator(Configurator):
+
+    model = DataSourceInfo
+
     def __init__(self, table_name=None, table_fields=None):
         self.table_name = table_name
         self.table_fields = table_fields
@@ -78,7 +106,9 @@ class TableInfoConfigurator:
         return self
 
 
-class FieldInfoConfigurator:
+class FieldInfoConfigurator(Configurator):
+
+    model = FieldInfo
 
     def __init__(
         self,
@@ -146,11 +176,11 @@ class FieldInfoConfigurator:
         return self
 
     def set_field_min(self, min: int):
-        self.field_min = min
+        self.field_min = min if min is not None else int(min)
         return self
 
     def set_field_max(self, max: int):
-        self.field_max = max
+        self.field_max = max if max is not None else int(max)
         return self
 
     def set_field_alias(self, alias: str):
@@ -162,19 +192,19 @@ class FieldInfoConfigurator:
         return self
 
     def set_field_gt(self, gt: float):
-        self.field_gt = gt
+        self.field_gt = gt if gt is not None else float(gt)
         return self
 
     def set_field_lt(self, lt: float):
-        self.field_lt = lt
+        self.field_lt = lt if lt is not None else float(lt)
         return self
 
     def set_field_ge(self, ge: float):
-        self.field_ge = ge
+        self.field_ge = ge if ge is not None else float(ge)
         return self
 
     def set_field_le(self, le: float):
-        self.field_le = le
+        self.field_le = le if le is not None else float(le)
         return self
 
     def set_field_decimal_places(self, decimal_places: int):
@@ -190,6 +220,9 @@ class FieldInfoConfigurator:
         return self
 
     def set_field_default_value(self, default_value):
+        _type = FIELD_TYPES.get(self.field_type)
+        if _type != datetime.datetime:
+            print("SET FIELD DEFAULT VALUE", default_value, _type, self.field_type, type(default_value))
+            default_value = _type(default_value)
         self.field_default_value = default_value
         return self
-
