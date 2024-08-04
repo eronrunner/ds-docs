@@ -1,24 +1,22 @@
 import json
 import re
-from functools import wraps, partial
+from functools import wraps
 from typing import Sequence, Tuple, List, Optional, Mapping, Any
 
 import click
 import questionary
 from click import HelpFormatter
-from prompt_toolkit.styles import Style
-
-from src.logger.log import Logger
-from src.model.meta import TableInfo, DATA_SOURCE_TYPES
-
+from click_help_colors import HelpColorsGroup, HelpColorsCommand
 from pydantic import ValidationError
+from questionary import Style, Choice
+
 from src.configurator.configurator import (
     DatasourceInfoConfigurator,
     TableInfoConfigurator,
     FieldInfoConfigurator,
 )
-from click_help_colors import HelpColorsGroup, HelpColorsCommand
-
+from src.logger.log import Logger
+from src.model.meta import TableInfo
 
 logger: 'Logger'
 theme: 'Theme'
@@ -34,8 +32,6 @@ def set_theme(_theme: 'Theme'):
     global theme
     theme = _theme
 
-
-from questionary import Style
 
 custom_style_fancy = Style([
     ('qmark', 'fg:#673ab7 bold'),       # token in front of the question
@@ -292,6 +288,10 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
     logger.info("Configure fields")
     configured_fields = []
     field_configurator = FieldInfoConfigurator()
+    unconfigured_fields = field_configurator.get_unconfigured_fields()
+    for field_name in unconfigured_fields:
+        format_name = field_name.replace("_", " ").capitalize()
+        _process_field(field_configurator, field_name, format_name)
     while True:
         if configured_fields:
             logger.info(f"Configured fields: {', '.join(configured_fields)}")
@@ -319,40 +319,85 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
 def _process_field_errors(configurator: 'Configurator', err: dict, field_name: str, display_name: str = "") -> Any:
     choices = configurator.get_choices(field_name)
     logger.info(theme.h2(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}"))
-    is_hidden = field_name in _HIDDEN_FIELDS
+    return _process_field(configurator, field_name, display_name)
 
+
+__NULL = "__NULL"
+
+
+def _build_choices(choices: dict, default: str = None):
+    _choices = []
+    for i, c in enumerate(choices):
+        print("COII", i, c, type(c), type(choices))
+        is_checked = False
+        if default == c:
+            is_checked = True
+        choice = Choice(title=c, value=c, checked=is_checked)
+        _choices.append(choice)
+    return _choices
+
+
+def _process_field(configurator: 'Configurator', field_name: str, display_name: str = "") -> Any:
+    field_types = configurator.get_types(field_name)
+    is_hidden = field_name in _HIDDEN_FIELDS
+    is_boolean = bool in field_types
+    is_optional = type(None) in field_types
+    choices = configurator.get_choices(field_name) if not is_boolean else {"True": "True", "False": "False"}
+    default_value = configurator.get_default(field_name)
+    instruction = configurator.get_hint(field_name)
     if len(choices):
-        question = questionary.select(f"Enter {display_name}: ", choices, style=custom_style_fancy)
+        print("AFTER1")
+        if is_optional:
+            choices["NOT SET"] = __NULL
+        print("AFTER1", field_name, default_value, choices[default_value])
+        choices = _build_choices(choices, default=default_value)
+        question = questionary.select(
+            f"Enter {display_name}: ",
+            choices=choices,
+            style=custom_style_fancy,
+            instruction=instruction
+        )
+        print("AFTER1")
     else:
         if is_hidden:
-            question = questionary.password(f"Enter {display_name}: ")
+            question = questionary.password(
+                f"Enter {display_name}: ",
+                instruction=instruction,
+                default=default_value if default_value else __NULL
+            )
         else:
-            question = questionary.text(f"Enter {display_name}: ")
-    if field_type_value:= configurator.__getattribute__("field_type"):
-        if field_type_value == "str":
-
-    configurator.__getattribute__(f"set_{field_name}")(
-        field_value.strip()
-    )
+            question = questionary.text(
+                f"Enter {display_name}: ",
+                instruction=instruction,
+                default=default_value if default_value else __NULL
+            )
+    print("AFTER")
+    field_type_value = configurator.__getattribute__("field_type")
+    if _should_be_asked(field_name, field_type_value):
+        field_value = question.ask()
+        print("VALUES", type(field_value))
+        if field_value == __NULL:
+            field_value = None
+        configurator.__getattribute__(f"set_{field_name}")(
+            field_value.strip() if isinstance(field_value, str) else field_value
+        )
+    else:
+        field_value = None
+    print("FIELD VALUE", type(field_value), field_value)
     return field_value
 
 
-_str_asked_fields = {"field_type", "field_pattern", "field_min", "field_max"}
+_str_asked_fields = {"field_pattern", "field_min", "field_max"}
 _int_asked_fields = ("field_gt", "field_lt", "field_ge", "field_le", "field_decimal_places")
-_default_asked_fields = ("field_alias", "field_factory", "field_required", "field_unique", "field_default_value")
+_default_asked_fields = ("field_name", "field_type", "field_alias", "field_factory", "field_required", "field_unique", "field_default_value")
 
 
-def _type_field_questions(configurator, field_name: str, field_type: str):
+def _should_be_asked(field_name: str, field_type: str):
     if field_name in _default_asked_fields:
         return True
     elif field_type == "text" and field_name in _str_asked_fields:
         return True
     elif field_type in ("integer", "float", "datetime") and field_name in _int_asked_fields:
-        if field_name == "field_gt" and configurator.__getattribute__("field_ge") is not None:
-            return False
-        elif field_name == "field_lt" and configurator.__getattribute__("field_le") is not None:
-            return False
-        elif
         return True
 
     return False

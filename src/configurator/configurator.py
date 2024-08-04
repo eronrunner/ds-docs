@@ -4,6 +4,8 @@ from typing import Any
 
 from src.model.meta import DataSourceInfo, TableInfo, FieldInfo, Choices, FIELD_TYPES
 
+NOT_SET = object()
+
 
 class Configurator:
 
@@ -20,6 +22,26 @@ class Configurator:
                 return meta.choices
         return {}
 
+    @classmethod
+    def get_default(cls, field_name: str) -> Any:
+        field = cls.model.model_fields[field_name]
+        return cls.model.get_default(field)
+
+    @classmethod
+    def get_hint(cls, field_name: str) -> str:
+        if field_name not in cls.model.model_fields:
+            raise ValueError(f"Field {field_name} is not exist")
+        hint = cls.model.get_field_hint(cls.model.model_fields[field_name])
+        hint_format = "\n"
+        for _, hint_value in hint.items():
+            hint_format += f"[{hint_value}]"
+        hint_format += "\n"
+        return hint_format
+
+    @classmethod
+    def get_types(cls, field_name: str) -> tuple:
+        return cls.model.get_types(cls.model.model_fields[field_name])
+
     def configure(self):
         raise NotImplementedError('Method not implemented')
 
@@ -30,12 +52,12 @@ class DatasourceInfoConfigurator(Configurator):
 
     def __init__(
         self,
-        ds_name=None,
-        ds_type=None,
-        ds_host=None,
-        ds_port=None,
-        ds_user=None,
-        ds_password=None,
+        ds_name=NOT_SET,
+        ds_type=NOT_SET,
+        ds_host=NOT_SET,
+        ds_port=NOT_SET,
+        ds_user=NOT_SET,
+        ds_password=NOT_SET
     ):
         self.ds_name = ds_name
         self.ds_type = ds_type
@@ -112,27 +134,27 @@ class FieldInfoConfigurator(Configurator):
 
     def __init__(
         self,
-        field_name=None,
-        field_type=None,
-        field_pattern=None,
-        field_min=None,
-        field_max=None,
-        field_alias=None,
-        field_factory=None,
-        field_gt=None,
-        field_lt=None,
-        field_ge=None,
-        field_le=None,
-        field_decimal_places=None,
-        field_required=None,
-        field_unique=None,
-        field_default_value=None,
+        field_name=NOT_SET,
+        field_type=NOT_SET,
+        field_pattern=NOT_SET,
+        field_min_length=NOT_SET,
+        field_max_length=NOT_SET,
+        field_alias=NOT_SET,
+        field_factory=NOT_SET,
+        field_gt=NOT_SET,
+        field_lt=NOT_SET,
+        field_ge=NOT_SET,
+        field_le=NOT_SET,
+        field_decimal_places=NOT_SET,
+        field_required=NOT_SET,
+        field_unique=NOT_SET,
+        field_default_value=NOT_SET,
     ):
         self.field_name = field_name
         self.field_type = field_type
         self.field_pattern = field_pattern
-        self.field_min = field_min
-        self.field_max = field_max
+        self.field_min_length = field_min_length
+        self.field_max_length = field_max_length
         self.field_alias = field_alias
         self.field_factory = field_factory
         self.field_gt = field_gt
@@ -144,13 +166,22 @@ class FieldInfoConfigurator(Configurator):
         self.field_unique = field_unique
         self.field_default_value = field_default_value
 
+    def get_unconfigured_fields(self):
+        print("GET UNCONFIGURED FIELDS", list(self.__dict__.keys()))
+        for field in self.__dict__:  # self.__dict__.keys()
+            # typing.get_type_hints(Metadata)
+            print("Field HINT", field, typing.get_type_hints(self.model))
+            if self.__dict__[field] == NOT_SET:
+                yield field
+
+
     def configure(self):
         return FieldInfo(
             field_name=self.field_name,
             field_type=self.field_type,
             field_pattern=self.field_pattern,
-            field_min=self.field_min,
-            field_max=self.field_max,
+            field_min_length=self.field_min_length,
+            field_max_length=self.field_max_length,
             field_alias=self.field_alias,
             field_factory=self.field_factory,
             field_gt=self.field_gt,
@@ -175,12 +206,12 @@ class FieldInfoConfigurator(Configurator):
         self.field_pattern = pattern
         return self
 
-    def set_field_min(self, min: int):
-        self.field_min = min if min is not None else int(min)
+    def set_field_min_length(self, min: int):
+        self.field_min_length = min if min is not None else int(min)
         return self
 
-    def set_field_max(self, max: int):
-        self.field_max = max if max is not None else int(max)
+    def set_field_max_length(self, max: int):
+        self.field_max_length = max if max is not None else int(max)
         return self
 
     def set_field_alias(self, alias: str):
@@ -208,7 +239,7 @@ class FieldInfoConfigurator(Configurator):
         return self
 
     def set_field_decimal_places(self, decimal_places: int):
-        self.field_decimal_places = decimal_places
+        self.field_decimal_places = int(decimal_places)
         return self
 
     def set_field_required(self, required: bool):
