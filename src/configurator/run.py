@@ -43,24 +43,27 @@ custom_style_fancy = Style([
     ('separator', 'fg:#cc5454'),        # separator in lists
     ('instruction', ''),                # user instructions for select, rawselect, checkbox
     ('text', ''),                       # plain text
-    ('disabled', 'fg:#858585 italic')   # disabled choices for select and checkbox prompts
+    ('disabled', 'fg:#858585 italic'),   # disabled choices for select and checkbox prompts
+    ('placeholder', 'fg:#858585 italic')   # disabled choices for select and checkbox prompts
 ])
 
 
-def context_path(func):
+def context_path(relative=""):
 
-    @wraps(func)
-    def decorator(*args, **kwargs):
-        ctx = args[0]
-        ctx.ensure_object(dict)
-        if "path" not in ctx.obj:
-            ctx.obj["path"] = ["Datasource docs"]
-        rs = func(*args, **kwargs)
-        if ctx.invoked_subcommand:
-            ctx.obj["path"].append(ctx.invoked_subcommand)
-        click.echo(theme.h1("->".join(ctx.obj["path"])))
-        return rs
-
+    def decorator(func):
+        func.context_path = relative
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            ctx = args[0]
+            ctx.ensure_object(dict)
+            if "path" not in ctx.obj:
+                ctx.obj["path"] = ["Datasource docs"]
+            rs = func(*args, **kwargs)
+            if ctx.invoked_subcommand:
+                ctx.obj["path"].append(globals()[ctx.invoked_subcommand.replace("-", "_")].callback.context_path or ctx.invoked_subcommand)
+            click.echo(theme.h1("->".join(ctx.obj["path"])))
+            return rs
+        return wrapper
     return decorator
 
 
@@ -185,7 +188,7 @@ class CommandColor(HelpColorsCommand):
 @click.help_option("--help", help="Show command guide")
 @click.pass_context
 @handle_error
-@context_path
+@context_path(relative="Datasource docs")
 def run(ctx, namespace, output):
     ctx.ensure_object(dict)
     ctx.obj["namespace"] = namespace
@@ -213,7 +216,7 @@ _HIDDEN_FIELDS = {"ds_password"}
 @click.option("--data-source-user", help="Data source user", default="")
 @click.option("--data-source-password", help="Data source password", default="")
 @click.pass_context
-@context_path
+@context_path(relative="Configure data source")
 def configure_ds(
     ctx,
     data_source_name,
@@ -258,30 +261,39 @@ def configure_ds(
 @run.command("configure-table", cls=CommandColor, help="Configure table")
 @click.option("--table-name", help="Table name", default=None)
 @click.pass_context
-@context_path
+@context_path(relative="Configure table")
 def configure_table(ctx, table_name, export=True) -> "TableInfo":
     """
     Configure table
     """
-    try:
-        ctx.ensure_object(dict)
-        table_info_configurator = TableInfoConfigurator()
-        table_info_configurator.set_table_name(table_name)
-        # Configure fields
-        configured_fields = _configure_fields(ctx, table_info_configurator)
-        if configured_fields:
-            logger.info(f"Configured fields: {', '.join(configured_fields)}")
-        table_info = table_info_configurator.configure()
-        if export:
-            logger.info("Export table info . . .")
-            _export(
-                f"{ctx.obj['output']}/{ctx.obj['namespace']}-tableinfo-{table_name}-config.json",
-                table_info.model_dump_json(by_alias=True, indent=2),
-                "w+",
-            )
-        return table_info
-    except Exception as e:
-        logger.error(f"Error: {e}")
+    # try:
+    ctx.ensure_object(dict)
+    table_info_configurator = TableInfoConfigurator()
+    table_info_configurator.set_table_name(table_name).set_table_fields(None)
+    while True:
+        try:
+            table_info_configurator.configure()
+            break
+        except (ValidationError, ValueError) as e:
+            for err in e.errors():
+                field_name = err["loc"][0]
+                format_name = field_name.replace("_", " ").capitalize()
+                _process_field_errors(table_info_configurator, err, field_name, format_name)
+    # Configure fields
+    configured_fields = _configure_fields(ctx, table_info_configurator)
+    if configured_fields:
+        logger.info(f"Table completely configured with fields: {', '.join(configured_fields)}")
+    table_info = table_info_configurator.configure()
+    if export:
+        logger.info("Export table info . . .")
+        _export(
+            f"{ctx.obj['output']}/{ctx.obj['namespace']}-tableinfo-{table_name}-config.json",
+            table_info.model_dump_json(by_alias=True, indent=2),
+            "w+",
+        )
+    return table_info
+    # except Exception as e:
+    #     logger.error(f"Error: {e}")
 
 
 def _configure_fields(ctx, table_configurator) -> list[str]:
@@ -300,7 +312,7 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
             table_configurator.add_table_field(field_info)
             configured_fields.append(field_info.field_name)
             add_more = questionary.confirm(
-                theme.normal("Do you want to add more another field? (y/n)")
+                "Do you want to add more another field?"
                 , default=True
             ).ask()
             if not add_more:
@@ -311,8 +323,8 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
                 field_name = err["loc"][0]
                 format_name = field_name.replace("_", " ").capitalize()
                 _process_field_errors(field_configurator, err, field_name, format_name)
-        except Exception as e:
-            logger.error(f"Error: {e}")
+        # except Exception as e:
+        #     logger.error(f"Error: {e}")
     return configured_fields
 
 
@@ -327,60 +339,67 @@ __NULL = "__NULL"
 
 def _build_choices(choices: dict, default: str = None):
     _choices = []
-    for i, c in enumerate(choices):
-        print("COII", i, c, type(c), type(choices))
-        is_checked = False
-        if default == c:
-            is_checked = True
-        choice = Choice(title=c, value=c, checked=is_checked)
+    first_choice = None
+    for k, v in choices.items():
+        choice = Choice(title=k, value=v)
+        if default == v:
+            first_choice = choice
         _choices.append(choice)
-    return _choices
+    return _choices, first_choice
 
 
 def _process_field(configurator: 'Configurator', field_name: str, display_name: str = "") -> Any:
+    print("FIELD_NAME", field_name)
     field_types = configurator.get_types(field_name)
     is_hidden = field_name in _HIDDEN_FIELDS
     is_boolean = bool in field_types
     is_optional = type(None) in field_types
-    choices = configurator.get_choices(field_name) if not is_boolean else {"True": "True", "False": "False"}
+    choices = configurator.get_choices(field_name) if not is_boolean else {"True": True, "False": False}
     default_value = configurator.get_default(field_name)
     instruction = configurator.get_hint(field_name)
-    if len(choices):
-        print("AFTER1")
+    if choices:
         if is_optional:
             choices["NOT SET"] = __NULL
-        print("AFTER1", field_name, default_value, choices[default_value])
-        choices = _build_choices(choices, default=default_value)
+        choices, first_choice = _build_choices(choices, default=default_value)
         question = questionary.select(
             f"Enter {display_name}: ",
             choices=choices,
             style=custom_style_fancy,
-            instruction=instruction
+            instruction=instruction,
+            default=first_choice
         )
-        print("AFTER1")
     else:
         if is_hidden:
             question = questionary.password(
                 f"Enter {display_name}: ",
                 instruction=instruction,
-                default=default_value if default_value else __NULL
+                default=default_value if default_value else __NULL,
+                placeholder=f"By default, set: {default_value}" if default_value else "[Your typed value will be hidden]"
             )
         else:
             question = questionary.text(
                 f"Enter {display_name}: ",
                 instruction=instruction,
-                default=default_value if default_value else __NULL
+                placeholder=str(default_value) if default_value else __NULL,
+
             )
-    print("AFTER")
+    if isinstance(configurator, FieldInfoConfigurator):
+        field_value = _process_field_info(configurator, field_name, question)
+    else:
+        field_value = question.ask()
+    print("SET_VALUE", field_name, field_value)
+    configurator.__getattribute__(f"set_{field_name}")(
+        field_value.strip() if isinstance(field_value, str) else field_value
+    )
+    return field_value
+
+
+def _process_field_info(configurator: 'Configurator', field_name: str, question: questionary.Question) -> Any:
     field_type_value = configurator.__getattribute__("field_type")
     if _should_be_asked(field_name, field_type_value):
         field_value = question.ask()
-        print("VALUES", type(field_value))
         if field_value == __NULL:
             field_value = None
-        configurator.__getattribute__(f"set_{field_name}")(
-            field_value.strip() if isinstance(field_value, str) else field_value
-        )
     else:
         field_value = None
     print("FIELD VALUE", type(field_value), field_value)
@@ -393,6 +412,7 @@ _default_asked_fields = ("field_name", "field_type", "field_alias", "field_facto
 
 
 def _should_be_asked(field_name: str, field_type: str):
+    print("FIELD_TYPE", field_name, field_type)
     if field_name in _default_asked_fields:
         return True
     elif field_type == "text" and field_name in _str_asked_fields:
@@ -405,7 +425,7 @@ def _should_be_asked(field_name: str, field_type: str):
 
 @run.command("configure-tables", cls=CommandColor, help="Configure tables")
 @click.pass_context
-@context_path
+@context_path(relative="Configure tables")
 def configure_tables(ctx):
     """
     Configure table

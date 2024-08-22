@@ -42,6 +42,18 @@ class Configurator:
     def get_types(cls, field_name: str) -> tuple:
         return cls.model.get_types(cls.model.model_fields[field_name])
 
+    @classmethod
+    def is_required(cls, field_name: str) -> bool:
+        return cls.model.is_required(cls.model.model_fields[field_name])
+
+    def get_unconfigured_fields(self):
+        print("GET UNCONFIGURED FIELDS", list(self.__dict__.keys()))
+        for field in self.__dict__:  # self.__dict__.keys()
+            # typing.get_type_hints(Metadata)
+            print("Field HINT", field, typing.get_type_hints(self.model))
+            if self.__dict__[field] == NOT_SET:
+                yield field
+
     def configure(self):
         raise NotImplementedError('Method not implemented')
 
@@ -103,9 +115,9 @@ class DatasourceInfoConfigurator(Configurator):
 
 class TableInfoConfigurator(Configurator):
 
-    model = DataSourceInfo
+    model = TableInfo
 
-    def __init__(self, table_name=None, table_fields=None):
+    def __init__(self, table_name=NOT_SET, table_fields=NOT_SET):
         self.table_name = table_name
         self.table_fields = table_fields
 
@@ -166,15 +178,6 @@ class FieldInfoConfigurator(Configurator):
         self.field_unique = field_unique
         self.field_default_value = field_default_value
 
-    def get_unconfigured_fields(self):
-        print("GET UNCONFIGURED FIELDS", list(self.__dict__.keys()))
-        for field in self.__dict__:  # self.__dict__.keys()
-            # typing.get_type_hints(Metadata)
-            print("Field HINT", field, typing.get_type_hints(self.model))
-            if self.__dict__[field] == NOT_SET:
-                yield field
-
-
     def configure(self):
         return FieldInfo(
             field_name=self.field_name,
@@ -207,11 +210,11 @@ class FieldInfoConfigurator(Configurator):
         return self
 
     def set_field_min_length(self, min: int):
-        self.field_min_length = min if min is not None else int(min)
+        self.field_min_length = min if min is None else int(min)
         return self
 
     def set_field_max_length(self, max: int):
-        self.field_max_length = max if max is not None else int(max)
+        self.field_max_length = max if max is None else int(max)
         return self
 
     def set_field_alias(self, alias: str):
@@ -223,27 +226,32 @@ class FieldInfoConfigurator(Configurator):
         return self
 
     def set_field_gt(self, gt: float):
-        self.field_gt = gt if gt is not None else float(gt)
+        self.field_gt = gt if gt is None else float(gt)
         return self
 
     def set_field_lt(self, lt: float):
-        self.field_lt = lt if lt is not None else float(lt)
+        self.field_lt = lt if lt is None else float(lt)
         return self
 
     def set_field_ge(self, ge: float):
-        self.field_ge = ge if ge is not None else float(ge)
+        self.field_ge = ge if ge is None else float(ge)
         return self
 
     def set_field_le(self, le: float):
-        self.field_le = le if le is not None else float(le)
+        self.field_le = le if le is None else float(le)
         return self
 
     def set_field_decimal_places(self, decimal_places: int):
-        self.field_decimal_places = int(decimal_places)
+        self.field_decimal_places = decimal_places if decimal_places is None else int(decimal_places)
         return self
 
-    def set_field_required(self, required: bool):
-        self.field_required = required
+    def set_field_required(self, required: bool | str | int):
+        if isinstance(required, (bool, int)):
+            self.field_required = bool(required)
+        elif isinstance(required, str):
+            self.field_required = required.lower() == "true"
+        else:
+            raise ValueError(f"Invalid value for required: {required}")
         return self
 
     def set_field_unique(self, unique: bool):

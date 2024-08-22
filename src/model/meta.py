@@ -70,8 +70,10 @@ class FieldDetailHelper:
     @classmethod
     def get_field_hint(cls, field: 'FieldInfo') -> collections.OrderedDict[str, str]:
         generic_meta_cls = "<class 'pydantic._internal._fields._general_metadata_cls.<locals>._PydanticGeneralMetadata'>"
-        hint = collections.OrderedDict({"required": "Required" if field.json_schema_extra.get("required") else "Optional"})
-        hint["default"] = f"Default value: {cls.get_default(field)}"
+        is_required = cls.is_required(field)
+        hint = collections.OrderedDict({"required": "Required" if is_required else "Optional"})
+        if not is_required:
+            hint["default"] = f"Default value: {cls.get_default(field)}"
         for info in field.metadata:
             if isinstance(info, MinLen):
                 hint["min_length"] = f"Min length: {info.min_length}"
@@ -96,6 +98,10 @@ class FieldDetailHelper:
             return annotated.__args__
         else:
             return (annotated, )
+
+    @classmethod
+    def is_required(cls, field: 'FieldInfo') -> bool:
+        return not (type(None) in cls.get_types(field) or Any in cls.get_types(field))
 
 
 class ForeignKeyInfo(BaseModel):
@@ -154,11 +160,11 @@ class FieldInfo(BaseModel, FieldDetailHelper):
                 if data["field_required"]:
                     raise ValueError(f"Field Value cannot be Null")
         elif _t == str:
-            if "field_min_length" in data and len(value) < data["field_min_length"]:
+            if data.get("field_min_length") and len(value) < data["field_min_length"]:
                 raise ValueError(f"Field value {value} should be greater than {data['field_min_length']}")
-            if "field_max_length" in data and len(value) > data["field_max_length"]:
+            if data.get("field_max_length") and len(value) > data["field_max_length"]:
                 raise ValueError(f"Field value {value} should be less than {data['field_max_length']}")
-            if "field_pattern" in data and not re.match(data["field_pattern"], value):
+            if data.get("field_pattern") and not re.match(data["field_pattern"], value):
                 raise ValueError(f"Field value {value} should match pattern {data['field_pattern']}")
         elif _t in (int, float):
             cls._check_number(value, data)
@@ -263,13 +269,15 @@ class FieldInfo(BaseModel, FieldDetailHelper):
     def __str__(self):
         return f"FieldInfo(field_name={self.field_name}, field_type={self.field_type})"
 
+
 print("FIELDSSS", FieldInfo.model_fields)
 
-class TableInfo(BaseModel):
+
+class TableInfo(BaseModel, FieldDetailHelper):
     model_config = ConfigDict(validate_assignment=True)
 
     table_name: str = Field(pattern="^[a-zA-Z][a-zA-Z0-9_]*$", min_length=1, max_length=64)
-    table_fields: Optional[Sequence[FieldInfo]] = None
+    table_fields: Optional[Sequence[FieldInfo]]
 
     def __str__(self):
         return f"TableInfo(table_name={self.table_name}, table_columns={self.table_fields})"

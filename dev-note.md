@@ -8,8 +8,8 @@
 - Check str type and int type to specify steps to input value by Click and Questionary
 - Handle auto increment for int type
 - Handle KeyInterruption for Click
-- Handle context path for Click
-- Default value if user doesn't input value and have no choices
+- Handle context path for Click - **DONE**
+- Default value if user doesn't input value and have no choices - **DONE**
 ## Phase 2
 
 ### Note
