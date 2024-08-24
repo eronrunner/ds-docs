@@ -1,11 +1,12 @@
 import json
 import re
+import sys
 from functools import wraps
 from typing import Sequence, Tuple, List, Optional, Mapping, Any
 
 import click
 import questionary
-from click import HelpFormatter
+from click import HelpFormatter, Abort
 from click_help_colors import HelpColorsGroup, HelpColorsCommand
 from pydantic import ValidationError
 from questionary import Style, Choice
@@ -71,8 +72,10 @@ def handle_error(func):
 
     @wraps(func)
     def decorator(*args, **kwargs):
-        # try:
+        try:
             return func(*args, **kwargs)
+        except Abort:
+            sys.exit(1)
         # except Exception as e:
         #     global theme
         #     logger.critical(f"Error: {e}")
@@ -318,6 +321,7 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
             if not add_more:
                 break
             field_configurator = FieldInfoConfigurator()
+
         except (ValidationError, ValueError) as e:
             for err in e.errors():
                 field_name = err["loc"][0]
@@ -330,7 +334,7 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
 
 def _process_field_errors(configurator: 'Configurator', err: dict, field_name: str, display_name: str = "") -> Any:
     choices = configurator.get_choices(field_name)
-    logger.info(theme.h2(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}"))
+    logger.info(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}")
     return _process_field(configurator, field_name, display_name)
 
 
@@ -387,6 +391,8 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
         field_value = _process_field_info(configurator, field_name, question)
     else:
         field_value = question.ask()
+    if field_value is None:
+        raise KeyboardInterrupt
     print("SET_VALUE", field_name, field_value)
     configurator.__getattribute__(f"set_{field_name}")(
         field_value.strip() if isinstance(field_value, str) else field_value

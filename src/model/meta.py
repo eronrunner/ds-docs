@@ -292,7 +292,7 @@ DATA_SOURCE_TYPES = {
 }
 
 
-class DataSourceInfo(BaseModel):
+class DataSourceInfo(BaseModel, FieldDetailHelper):
     model_config = ConfigDict(validate_assignment=True)
 
     ds_name: str = Field(min_length=2, max_length=32, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")

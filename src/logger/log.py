@@ -27,6 +27,19 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
+class PrependRotatingFileHandler(RotatingFileHandler):
+    def emit(self, record):
+        try:
+            if self.shouldRollover(record):
+                self.doRollover()
+            with open(self.baseFilename, 'r+') as f:
+                content = f.read()
+                f.seek(0, 0)
+                f.write(self.format(record) + '\n' + content)
+        except Exception:
+            self.handleError(record)
+
+
 class Logger(logging.Logger):
     def __init__(self, name: str, output: str, theme=None,
                  fmt="[%(asctime)s] - [%(name)s] - [%(levelname)s] - %(message)s",
@@ -37,8 +50,8 @@ class Logger(logging.Logger):
         self.stream_handler = logging.StreamHandler(sys.stdout)
         self.addHandler(self.stream_handler)
         self.stream_handler.setFormatter(self.formatter)
-        self.file_handler = RotatingFileHandler(
-            f"{output}/logs-out.log", maxBytes=100000, backupCount=10
+        self.file_handler = PrependRotatingFileHandler(
+            f"{output}/logs-out.log", maxBytes=100000, backupCount=10, encoding="utf-8",
         )
         _fmt = logging.Formatter(fmt)
         self.file_handler.setFormatter(_fmt)
