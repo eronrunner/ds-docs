@@ -86,6 +86,7 @@ class Color(Enum):
     MAGENTA = '\033[35m'
     CYAN = '\033[36m'
     WHITE = '\033[37m'
+    GRAY = '\033[90m'
     END = '\033[0m'
 
     @classmethod
@@ -162,7 +163,7 @@ default_theme = Theme(
     info=Style(Color.CYAN, [Font.BOLD], Layout()),
     warning=Style(Color.YELLOW, [Font.ITALIC], Layout()),
     error=Style(Color.RED, [Font.BOLD], Layout()),
-    debug=Style(Color.WHITE, [Font.BOLD], Layout()),
+    debug=Style(Color.GRAY, [Font.BOLD], Layout()),
     critical=Style(Color.RED, [Font.BOLD, Font.ITALIC], Layout())
 )
 

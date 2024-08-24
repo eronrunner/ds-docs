@@ -21,6 +21,8 @@ from src.model.meta import TableInfo
 
 logger: 'Logger'
 theme: 'Theme'
+custom_style_fancy: 'Style'
+first_asked = True
 
 
 def set_logger(name: str, output: str, theme=None):
@@ -29,24 +31,30 @@ def set_logger(name: str, output: str, theme=None):
 
 
 def set_theme(_theme: 'Theme'):
-
-    global theme
+    global theme, custom_style_fancy
     theme = _theme
+    custom_style_fancy = theme_to_questionary_style(theme)
 
 
-custom_style_fancy = Style([
-    ('qmark', 'fg:#673ab7 bold'),       # token in front of the question
-    ('question', 'bold'),               # question text
-    ('answer', 'fg:#f44336 bold'),      # submitted answer text behind the question
-    ('pointer', 'fg:#673ab7 bold'),     # pointer used in select and checkbox prompts
-    ('highlighted', 'fg:#673ab7 bold'), # pointed-at choice in select and checkbox prompts
-    ('selected', 'fg:#cc5454'),         # style for a selected item of a checkbox
-    ('separator', 'fg:#cc5454'),        # separator in lists
-    ('instruction', ''),                # user instructions for select, rawselect, checkbox
-    ('text', ''),                       # plain text
-    ('disabled', 'fg:#858585 italic'),   # disabled choices for select and checkbox prompts
-    ('placeholder', 'fg:#858585 italic')   # disabled choices for select and checkbox prompts
-])
+def style_to_string(theme_style) -> str:
+    ascii_prefix = "ansi"
+    return f"{ascii_prefix}{theme_style.color.name.lower()} {' '.join([f.name.lower() for f in theme_style.font])}"
+
+
+def theme_to_questionary_style(theme: 'Theme') -> 'Style':
+    return Style([
+        ('qmark', style_to_string(theme._h1)),       # token in front of the question
+        ('question', style_to_string(theme._h1)),               # question text
+        ('answer', style_to_string(theme._h2)),      # submitted answer text behind the question
+        ('pointer', style_to_string(theme._h2)),     # pointer used in select and checkbox prompts
+        ('highlighted', style_to_string(theme._warning)),  # pointed-at choice in select and checkbox prompts
+        ('selected', style_to_string(theme._h3)),         # style for a selected item of a checkbox
+        ('separator', style_to_string(theme._h2)),        # separator in lists
+        ('instruction', style_to_string(theme._h3)),  # user instructions for select, rawselect, checkbox
+        ('text', style_to_string(theme._normal)),                       # plain text
+        ('disabled', style_to_string(theme._debug)),   # disabled choices for select and checkbox prompts
+        ('placeholder', style_to_string(theme._debug))   # disabled choices for select and checkbox prompts
+    ])
 
 
 def context_path(relative=""):
@@ -252,13 +260,14 @@ def configure_ds(
             )
             return
         except (ValidationError, ValueError) as e:
-            print(e.errors())
             for err in e.errors():
                 field_name = err["loc"][0]
                 format_name = DATA_SOURCE_INFO_ARGS_MAPPING[field_name].replace(
                     "_", " "
                 ).capitalize()
-                _process_field_errors(data_source_info_configurator, err, field_name, format_name)
+                _process_field_error(data_source_info_configurator, err, field_name, format_name)
+            global first_asked
+            first_asked = False
 
 
 @run.command("configure-table", cls=CommandColor, help="Configure table")
@@ -281,7 +290,9 @@ def configure_table(ctx, table_name, export=True) -> "TableInfo":
             for err in e.errors():
                 field_name = err["loc"][0]
                 format_name = field_name.replace("_", " ").capitalize()
-                _process_field_errors(table_info_configurator, err, field_name, format_name)
+                _process_field_error(table_info_configurator, err, field_name, format_name)
+        global first_asked
+        first_asked = False
     # Configure fields
     configured_fields = _configure_fields(ctx, table_info_configurator)
     if configured_fields:
@@ -326,15 +337,18 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
             for err in e.errors():
                 field_name = err["loc"][0]
                 format_name = field_name.replace("_", " ").capitalize()
-                _process_field_errors(field_configurator, err, field_name, format_name)
+                _process_field_error(field_configurator, err, field_name, format_name)
+            global first_asked
+            first_asked = False
         # except Exception as e:
         #     logger.error(f"Error: {e}")
     return configured_fields
 
 
-def _process_field_errors(configurator: 'Configurator', err: dict, field_name: str, display_name: str = "") -> Any:
+def _process_field_error(configurator: 'Configurator', err: dict, field_name: str, display_name: str = "") -> Any:
     choices = configurator.get_choices(field_name)
-    logger.info(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}")
+    if not first_asked and err['msg']:
+        logger.error(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}")
     return _process_field(configurator, field_name, display_name)
 
 
@@ -353,7 +367,6 @@ def _build_choices(choices: dict, default: str = None):
 
 
 def _process_field(configurator: 'Configurator', field_name: str, display_name: str = "") -> Any:
-    print("FIELD_NAME", field_name)
     field_types = configurator.get_types(field_name)
     is_hidden = field_name in _HIDDEN_FIELDS
     is_boolean = bool in field_types
@@ -377,13 +390,14 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
             question = questionary.password(
                 f"Enter {display_name}: ",
                 instruction=instruction,
-                default=default_value if default_value else __NULL,
+                style=custom_style_fancy,
                 placeholder=f"By default, set: {default_value}" if default_value else "[Your typed value will be hidden]"
             )
         else:
             question = questionary.text(
                 f"Enter {display_name}: ",
                 instruction=instruction,
+                style=custom_style_fancy,
                 placeholder=str(default_value) if default_value else __NULL,
 
             )
@@ -393,7 +407,6 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
         field_value = question.ask()
     if field_value is None:
         raise KeyboardInterrupt
-    print("SET_VALUE", field_name, field_value)
     configurator.__getattribute__(f"set_{field_name}")(
         field_value.strip() if isinstance(field_value, str) else field_value
     )
@@ -408,7 +421,6 @@ def _process_field_info(configurator: 'Configurator', field_name: str, question:
             field_value = None
     else:
         field_value = None
-    print("FIELD VALUE", type(field_value), field_value)
     return field_value
 
 
@@ -418,7 +430,6 @@ _default_asked_fields = ("field_name", "field_type", "field_alias", "field_facto
 
 
 def _should_be_asked(field_name: str, field_type: str):
-    print("FIELD_TYPE", field_name, field_type)
     if field_name in _default_asked_fields:
         return True
     elif field_type == "text" and field_name in _str_asked_fields:
@@ -448,11 +459,11 @@ def configure_tables(ctx):
             table_info = ctx.invoke(configure_table.callback, table_name=table_name, export=False)
             tables.append(table_info.model_dump(by_alias=True))
             configured_tables.append(table_info.table_name)
-            add_more = click.prompt(
-                theme.normal("Do you want to add more another field? (y/n)")
-                , default="y"
-            ).strip()
-            if add_more.lower() != "y":
+            add_more = questionary.confirm(
+                "Do you want to add more another field?"
+                , default=True
+            ).ask()
+            if not add_more:
                 break
         logger.info("Export tables info . . .")
         _export(

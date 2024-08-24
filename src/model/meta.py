@@ -5,7 +5,7 @@ import re
 import uuid
 from typing import Sequence, Any, Optional
 
-from annotated_types import BaseMetadata, SLOTS, MinLen, MaxLen
+from annotated_types import BaseMetadata, SLOTS, MinLen, MaxLen, Ge, Le, Gt, Lt
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.dataclasses import dataclass
 from pydantic_core import PydanticUndefined
@@ -83,6 +83,14 @@ class FieldDetailHelper:
                 hint["pattern"] = f"Pattern: {info.pattern}"
             elif isinstance(info, Choices):
                 hint["choices"] = "Choices: " + ", ".join(list(info.choices.keys()))
+            elif isinstance(info, Ge):
+                hint["ge"] = f"Greater than or equal to: {info.ge}"
+            elif isinstance(info, Le):
+                hint["le"] = f"Less than or equal to: {info.le}"
+            elif isinstance(info, Gt):
+                hint["gt"] = f"Greater than: {info.gt}"
+            elif isinstance(info, Lt):
+                hint["lt"] = f"Less than: {info.lt}"
         return hint
 
     @classmethod
@@ -270,9 +278,6 @@ class FieldInfo(BaseModel, FieldDetailHelper):
         return f"FieldInfo(field_name={self.field_name}, field_type={self.field_type})"
 
 
-print("FIELDSSS", FieldInfo.model_fields)
-
-
 class TableInfo(BaseModel, FieldDetailHelper):
     model_config = ConfigDict(validate_assignment=True)
 
@@ -298,7 +303,7 @@ class DataSourceInfo(BaseModel, FieldDetailHelper):
     ds_name: str = Field(min_length=2, max_length=32, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
     ds_type: str = _attach_choices(Field(min_length=1, max_length=32), DATA_SOURCE_TYPES)
     ds_host: str = Field(min_length=1, max_length=512)
-    ds_port: int = Field(field_type="int", min_length=0, max_length=65535)
+    ds_port: int = Field(field_type="int", ge=0, le=65535)
     ds_user: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
     ds_password: str = Field(min_length=1, max_length=512)
 
