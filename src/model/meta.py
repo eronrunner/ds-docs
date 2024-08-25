@@ -72,6 +72,7 @@ class FieldDetailHelper:
         generic_meta_cls = "<class 'pydantic._internal._fields._general_metadata_cls.<locals>._PydanticGeneralMetadata'>"
         is_required = cls.is_required(field)
         hint = collections.OrderedDict({"required": "Required" if is_required else "Optional"})
+        extra = cls.get_extra(field)
         if not is_required:
             hint["default"] = f"Default value: {cls.get_default(field)}"
         for info in field.metadata:
@@ -81,8 +82,6 @@ class FieldDetailHelper:
                 hint["max_length"] = f"Max length: {info.max_length}"
             elif str(type(info)) == generic_meta_cls and hasattr(info, "pattern"):
                 hint["pattern"] = f"Pattern: {info.pattern}"
-            elif isinstance(info, Choices):
-                hint["choices"] = "Choices: " + ", ".join(list(info.choices.keys()))
             elif isinstance(info, Ge):
                 hint["ge"] = f"Greater than or equal to: {info.ge}"
             elif isinstance(info, Le):
@@ -91,6 +90,12 @@ class FieldDetailHelper:
                 hint["gt"] = f"Greater than: {info.gt}"
             elif isinstance(info, Lt):
                 hint["lt"] = f"Less than: {info.lt}"
+        for info, v in extra.items():
+            if info == "validate_pattern":
+                hint["pattern"] = f"Pattern: {v}"
+            elif isinstance(v, Choices):
+                hint["choices"] = "Choices: " + ", ".join(list(v.choices.keys()))
+
         return hint
 
     @classmethod
@@ -109,7 +114,12 @@ class FieldDetailHelper:
 
     @classmethod
     def is_required(cls, field: 'FieldInfo') -> bool:
-        return not (type(None) in cls.get_types(field) or Any in cls.get_types(field))
+        types = cls.get_types(field)
+        return not (type(None) in types or Any in types)
+
+    @classmethod
+    def get_extra(cls, field: 'FieldInfo') -> dict[str: Any]:
+        return field.json_schema_extra or {}
 
 
 class ForeignKeyInfo(BaseModel):
@@ -131,16 +141,19 @@ class ForeignKeyInfo(BaseModel):
         return f"ForeignKeyInfo(field_name={self.field_name}, fk_table_name={self.fk_table_name}, fk_field_name={self.fk_field_name})"
 
 
+_NULL_PATTERN = "NULL__"
+
+
 class FieldInfo(BaseModel, FieldDetailHelper):
 
     field_name: str = Field(required=True, min_length=1, max_length=64, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
-    field_type: str = _attach_choices(Field(required=True, min_length=1, max_length=16, default=DEFAULT_TYPE),
-                                      dict([(k, k) for k, _ in FIELD_TYPES.items()]))
-    field_pattern: Optional[str] = Field(required=False, default=None)
+    field_type: str = Field(required=True, min_length=1, max_length=16, default=DEFAULT_TYPE,
+                            choices=Choices(dict([(k, k) for k, _ in FIELD_TYPES.items()])))
+    field_pattern: Optional[str] = Field(required=False)
     field_min_length: Optional[int] = Field(required=False)
     field_max_length: Optional[int] = Field(required=False)
-    field_alias: Optional[str] = Field(required=False, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
-    field_factory: Optional[str] = _attach_choices(Field(required=False, default=FIELD_FACTORIES[DEFAULT_FACTORY]), FIELD_FACTORIES)
+    field_alias: Optional[str] = Field(required=False, validate_pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$", default=None)
+    field_factory: Optional[str] = Field(required=False, default=FIELD_FACTORIES[DEFAULT_FACTORY], choices=Choices(FIELD_FACTORIES))
     field_gt: Optional[float] = Field(required=False, description="Greater than, applicable for numeric fields")
     field_lt: Optional[float] = Field(required=False, description="Less than, applicable for numeric fields")
     field_ge: Optional[float] = Field(required=False, description="Greater than or equal to, applicable for numeric fields")
@@ -150,13 +163,25 @@ class FieldInfo(BaseModel, FieldDetailHelper):
     field_unique: Optional[bool] = Field(required=False, default=False)
     field_default_value: Any = Field(required=False)
 
+    @field_validator("field_alias")
+    def validate_field_alias(cls, value, info: ValidationInfo) -> Optional[Any]:
+        data = info.data
+        pattern = cls.model_fields["field_alias"].json_schema_extra["validate_pattern"]
+        if "field_alias" in data and data["field_alias"] is not None:
+            print("DATAAAA", data["field_alias"])
+            if re.match(pattern, data["field_alias"]):
+                return data["field_alias"]
+            else:
+                raise ValueError(f"Field alias {value} should match pattern '{pattern}'")
+        return
+
     @field_validator("field_default_value")
-    def value(cls, value, info: ValidationInfo) -> Optional[Any]:
+    def validate_field_value(cls, value, info: ValidationInfo) -> Optional[Any]:
         data = info.data
         if "field_type" not in data:
             raise ValueError("Field type is required")
         if not isinstance(value, FIELD_TYPES[data["field_type"]]):
-            raise ValueError(f"Field Value {value} should be of type {str(FIELD_TYPES[data['field_type']])}")
+            raise ValueError(f"Field Value {str(value)} should be of type {str(FIELD_TYPES[data['field_type']])}")
         _t = FIELD_TYPES[data["field_type"]]
 
         if value is None:
@@ -261,13 +286,13 @@ class FieldInfo(BaseModel, FieldDetailHelper):
         return (low, low_expr), (high, high_expr)
 
     @field_validator("field_type")
-    def type(cls, value) -> str:
+    def validate_field_type(cls, value) -> str:
         if value not in FIELD_TYPES:
             raise ValueError(f"Field type {value} is not supported")
         return value
 
     @field_validator("field_factory")
-    def factory(cls, value) -> str:
+    def validate_field_factory(cls, value) -> str:
         if value is None:
             value = FieldInfo.model_fields["field_factory"].default
         elif value not in FIELD_FACTORIES:
@@ -277,6 +302,7 @@ class FieldInfo(BaseModel, FieldDetailHelper):
     def __str__(self):
         return f"FieldInfo(field_name={self.field_name}, field_type={self.field_type})"
 
+print("FIELDSSSS", FieldInfo.model_fields)
 
 class TableInfo(BaseModel, FieldDetailHelper):
     model_config = ConfigDict(validate_assignment=True)
@@ -301,7 +327,7 @@ class DataSourceInfo(BaseModel, FieldDetailHelper):
     model_config = ConfigDict(validate_assignment=True)
 
     ds_name: str = Field(min_length=2, max_length=32, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
-    ds_type: str = _attach_choices(Field(min_length=1, max_length=32), DATA_SOURCE_TYPES)
+    ds_type: str = Field(min_length=1, max_length=32, choices=Choices(DATA_SOURCE_TYPES))
     ds_host: str = Field(min_length=1, max_length=512)
     ds_port: int = Field(field_type="int", ge=0, le=65535)
     ds_user: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")

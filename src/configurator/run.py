@@ -1,5 +1,6 @@
 import json
 import re
+import signal
 import sys
 from functools import wraps
 from typing import Sequence, Tuple, List, Optional, Mapping, Any
@@ -9,7 +10,8 @@ import questionary
 from click import HelpFormatter, Abort
 from click_help_colors import HelpColorsGroup, HelpColorsCommand
 from pydantic import ValidationError
-from questionary import Style, Choice
+from questionary import Style, Choice, Question
+from questionary.constants import DEFAULT_KBI_MESSAGE
 
 from src.configurator.configurator import (
     DatasourceInfoConfigurator,
@@ -23,6 +25,25 @@ logger: 'Logger'
 theme: 'Theme'
 custom_style_fancy: 'Style'
 first_asked = True
+
+
+class CustomQuestion(Question):
+
+    def ask(
+        self, patch_stdout: bool = False, kbi_msg: str = DEFAULT_KBI_MESSAGE
+    ) -> Any:
+        try:
+            sys.stdout.flush()
+            return self.unsafe_ask(patch_stdout)
+        except KeyboardInterrupt as ex:
+            raise ex
+
+    @staticmethod
+    def instance(question: Question) -> 'CustomQuestion':
+        cus_question = CustomQuestion(question.application)
+        cus_question.should_skip_question = question.should_skip_question
+        cus_question.default = question.default
+        return cus_question
 
 
 def set_logger(name: str, output: str, theme=None):
@@ -83,6 +104,7 @@ def handle_error(func):
         try:
             return func(*args, **kwargs)
         except Abort:
+            logger.error("User cancelled")
             sys.exit(1)
         # except Exception as e:
         #     global theme
@@ -185,7 +207,7 @@ class CommandColor(HelpColorsCommand):
 @click.option(
     "-n",
     "--namespace",
-    help="File namespace to create your files",
+    help="Namespace to create your files",
     required=True,
     default="default",
 )
@@ -255,7 +277,7 @@ def configure_ds(
             data_source_info = data_source_info_configurator.configure()
             logger.info("Export data source info . . .")
             _export(
-                f"{ctx.obj['output']}/{ctx.obj['namespace']}-datasourceinfo-config.json",
+                f"{ctx.obj['output']}/{ctx.obj['namespace']}-datasourceinfo-{data_source_name}-config.json",
                 data_source_info.model_dump_json(by_alias=True, indent=2),
             )
             return
@@ -281,7 +303,7 @@ def configure_table(ctx, table_name, export=True) -> "TableInfo":
     # try:
     ctx.ensure_object(dict)
     table_info_configurator = TableInfoConfigurator()
-    table_info_configurator.set_table_name(table_name).set_table_fields(None)
+    table_info_configurator.set_table_name(table_name.strip()).set_table_fields(None)
     while True:
         try:
             table_info_configurator.configure()
@@ -386,27 +408,31 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
             default=first_choice
         )
     else:
+        if is_optional:
+            placeholder = f"By default, set: {default_value}" if default_value else __NULL
+        else:
+            placeholder = ""
         if is_hidden:
             question = questionary.password(
                 f"Enter {display_name}: ",
                 instruction=instruction,
                 style=custom_style_fancy,
-                placeholder=f"By default, set: {default_value}" if default_value else "[Your typed value will be hidden]"
+                default=default_value if default_value else __NULL,
+                placeholder=placeholder or "[Your input is hidden]"
             )
         else:
             question = questionary.text(
                 f"Enter {display_name}: ",
                 instruction=instruction,
                 style=custom_style_fancy,
-                placeholder=str(default_value) if default_value else __NULL,
-
+                placeholder=placeholder,
+                # default=default_value if default_value else __NULL
             )
+    question = CustomQuestion.instance(question)
     if isinstance(configurator, FieldInfoConfigurator):
         field_value = _process_field_info(configurator, field_name, question)
     else:
         field_value = question.ask()
-    if field_value is None:
-        raise KeyboardInterrupt
     configurator.__getattribute__(f"set_{field_name}")(
         field_value.strip() if isinstance(field_value, str) else field_value
     )
@@ -455,12 +481,16 @@ def configure_tables(ctx):
         while True:
             if configured_tables:
                 logger.info(f"Configured tables: {', '.join(configured_tables)}")
-            table_name = click.prompt(theme.normal("Enter table name")).strip()
+            table_name = CustomQuestion.instance(questionary.text(
+                "Enter table name",
+                style=custom_style_fancy,
+                instruction=TableInfoConfigurator().get_hint("table_name"),
+            )).ask()
             table_info = ctx.invoke(configure_table.callback, table_name=table_name, export=False)
             tables.append(table_info.model_dump(by_alias=True))
             configured_tables.append(table_info.table_name)
             add_more = questionary.confirm(
-                "Do you want to add more another field?"
+                "Do you want to add more another table?"
                 , default=True
             ).ask()
             if not add_more:

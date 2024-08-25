@@ -17,9 +17,9 @@ class Configurator:
 
     @classmethod
     def get_choices(cls, field_name: str) -> dict[str, Any]:
-        for meta in cls.get_metadata(field_name):
-            if isinstance(meta, Choices):
-                return meta.choices
+        for meta, v in cls.model.get_extra(cls.model.model_fields[field_name]).items():
+            if isinstance(v, Choices):
+                return v.choices
         return {}
 
     @classmethod
@@ -47,10 +47,8 @@ class Configurator:
         return cls.model.is_required(cls.model.model_fields[field_name])
 
     def get_unconfigured_fields(self):
-        print("GET UNCONFIGURED FIELDS", list(self.__dict__.keys()))
         for field in self.__dict__:  # self.__dict__.keys()
             # typing.get_type_hints(Metadata)
-            print("Field HINT", field, typing.get_type_hints(self.model))
             if self.__dict__[field] == NOT_SET:
                 yield field
 
@@ -261,7 +259,6 @@ class FieldInfoConfigurator(Configurator):
     def set_field_default_value(self, default_value):
         _type = FIELD_TYPES.get(self.field_type)
         if _type != datetime.datetime:
-            print("SET FIELD DEFAULT VALUE", default_value, _type, self.field_type, type(default_value))
             default_value = _type(default_value)
         self.field_default_value = default_value
         return self
