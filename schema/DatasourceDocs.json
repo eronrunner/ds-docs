@@ -1,0 +1,324 @@
+{
+  "$defs": {
+    "DataSourceInfo": {
+      "properties": {
+        "ds_name": {
+          "maxLength": 32,
+          "minLength": 2,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+          "title": "Ds Name",
+          "type": "string"
+        },
+        "ds_type": {
+          "choices": {
+            "choices": {
+              "mysql": "mysql",
+              "oracle": "oracle",
+              "postgresql": "postgresql"
+            }
+          },
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ds Type",
+          "type": "string"
+        },
+        "ds_host": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Ds Host",
+          "type": "string"
+        },
+        "ds_port": {
+          "field_type": "int",
+          "maximum": 65535,
+          "minimum": 0,
+          "title": "Ds Port",
+          "type": "integer"
+        },
+        "ds_user": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+          "title": "Ds User",
+          "type": "string"
+        },
+        "ds_password": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Ds Password",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ds_name",
+        "ds_type",
+        "ds_host",
+        "ds_port",
+        "ds_user",
+        "ds_password"
+      ],
+      "title": "DataSourceInfo",
+      "type": "object"
+    },
+    "FieldInfo": {
+      "properties": {
+        "field_name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+          "required": true,
+          "title": "Field Name",
+          "type": "string"
+        },
+        "field_type": {
+          "choices": {
+            "choices": {
+              "boolean": "boolean",
+              "datetime": "datetime",
+              "float": "float",
+              "integer": "integer",
+              "json": "json",
+              "list": "list",
+              "text": "text",
+              "uuid": "uuid"
+            }
+          },
+          "default": "text",
+          "maxLength": 16,
+          "minLength": 1,
+          "required": true,
+          "title": "Field Type",
+          "type": "string"
+        },
+        "field_factory": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "choices": {
+            "choices": {
+              "auto": "auto",
+              "manual": "manual"
+            }
+          },
+          "default": "manual",
+          "required": false,
+          "title": "Field Factory"
+        },
+        "field_alias": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "required": false,
+          "title": "Field Alias"
+        },
+        "field_required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "required": false,
+          "title": "Field Required"
+        },
+        "field_unique": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": false,
+          "required": false,
+          "title": "Field Unique"
+        },
+        "field_pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "required": false,
+          "title": "Field Pattern"
+        },
+        "field_min_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "required": false,
+          "title": "Field Min Length"
+        },
+        "field_max_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "required": false,
+          "title": "Field Max Length"
+        },
+        "field_gt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Greater than, applicable for numeric fields",
+          "required": false,
+          "title": "Field Gt"
+        },
+        "field_lt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Less than, applicable for numeric fields",
+          "required": false,
+          "title": "Field Lt"
+        },
+        "field_ge": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Greater than or equal to, applicable for numeric fields",
+          "required": false,
+          "title": "Field Ge"
+        },
+        "field_le": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Less than or equal to, applicable for numeric fields",
+          "required": false,
+          "title": "Field Le"
+        },
+        "field_decimal_places": {
+          "anyOf": [
+            {
+              "maximum": 10,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "required": false,
+          "title": "Field Decimal Places"
+        },
+        "field_default_value": {
+          "required": false,
+          "title": "Field Default Value"
+        }
+      },
+      "required": [
+        "field_name",
+        "field_alias",
+        "field_pattern",
+        "field_min_length",
+        "field_max_length",
+        "field_gt",
+        "field_lt",
+        "field_ge",
+        "field_le",
+        "field_decimal_places",
+        "field_default_value"
+      ],
+      "title": "FieldInfo",
+      "type": "object"
+    },
+    "TableInfo": {
+      "properties": {
+        "table_name": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+          "title": "Table Name",
+          "type": "string"
+        },
+        "table_fields": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/FieldInfo"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Table Fields"
+        }
+      },
+      "required": [
+        "table_name",
+        "table_fields"
+      ],
+      "title": "TableInfo",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "ds_info": {
+      "$ref": "#/$defs/DataSourceInfo"
+    },
+    "tables": {
+      "additionalProperties": {
+        "$ref": "#/$defs/TableInfo"
+      },
+      "title": "Tables",
+      "type": "object"
+    }
+  },
+  "required": [
+    "ds_info",
+    "tables"
+  ],
+  "title": "DatasourceDocs",
+  "type": "object"
+}

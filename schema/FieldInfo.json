@@ -1,0 +1,211 @@
+{
+  "properties": {
+    "field_name": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "required": true,
+      "title": "Field Name",
+      "type": "string"
+    },
+    "field_type": {
+      "choices": {
+        "choices": {
+          "boolean": "boolean",
+          "datetime": "datetime",
+          "float": "float",
+          "integer": "integer",
+          "json": "json",
+          "list": "list",
+          "text": "text",
+          "uuid": "uuid"
+        }
+      },
+      "default": "text",
+      "maxLength": 16,
+      "minLength": 1,
+      "required": true,
+      "title": "Field Type",
+      "type": "string"
+    },
+    "field_factory": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "choices": {
+        "choices": {
+          "auto": "auto",
+          "manual": "manual"
+        }
+      },
+      "default": "manual",
+      "required": false,
+      "title": "Field Factory"
+    },
+    "field_alias": {
+      "anyOf": [
+        {
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "required": false,
+      "title": "Field Alias"
+    },
+    "field_required": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "required": false,
+      "title": "Field Required"
+    },
+    "field_unique": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": false,
+      "required": false,
+      "title": "Field Unique"
+    },
+    "field_pattern": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "required": false,
+      "title": "Field Pattern"
+    },
+    "field_min_length": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "required": false,
+      "title": "Field Min Length"
+    },
+    "field_max_length": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "required": false,
+      "title": "Field Max Length"
+    },
+    "field_gt": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Greater than, applicable for numeric fields",
+      "required": false,
+      "title": "Field Gt"
+    },
+    "field_lt": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Less than, applicable for numeric fields",
+      "required": false,
+      "title": "Field Lt"
+    },
+    "field_ge": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Greater than or equal to, applicable for numeric fields",
+      "required": false,
+      "title": "Field Ge"
+    },
+    "field_le": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Less than or equal to, applicable for numeric fields",
+      "required": false,
+      "title": "Field Le"
+    },
+    "field_decimal_places": {
+      "anyOf": [
+        {
+          "maximum": 10,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "required": false,
+      "title": "Field Decimal Places"
+    },
+    "field_default_value": {
+      "required": false,
+      "title": "Field Default Value"
+    }
+  },
+  "required": [
+    "field_name",
+    "field_alias",
+    "field_pattern",
+    "field_min_length",
+    "field_max_length",
+    "field_gt",
+    "field_lt",
+    "field_ge",
+    "field_le",
+    "field_decimal_places",
+    "field_default_value"
+  ],
+  "title": "FieldInfo",
+  "type": "object"
+}

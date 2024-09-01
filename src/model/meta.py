@@ -3,7 +3,7 @@ import datetime
 import json
 import re
 import uuid
-from typing import Sequence, Any, Optional
+from typing import Sequence, Any, Optional, List
 
 from annotated_types import BaseMetadata, SLOTS, MinLen, MaxLen, Ge, Le, Gt, Lt
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -91,9 +91,7 @@ class FieldDetailHelper:
             elif isinstance(info, Lt):
                 hint["lt"] = f"Less than: {info.lt}"
         for info, v in extra.items():
-            if info == "validate_pattern":
-                hint["pattern"] = f"Pattern: {v}"
-            elif isinstance(v, Choices):
+            if isinstance(v, Choices):
                 hint["choices"] = "Choices: " + ", ".join(list(v.choices.keys()))
 
         return hint
@@ -141,58 +139,36 @@ class ForeignKeyInfo(BaseModel):
         return f"ForeignKeyInfo(field_name={self.field_name}, fk_table_name={self.fk_table_name}, fk_field_name={self.fk_field_name})"
 
 
-_NULL_PATTERN = "NULL__"
-
-
 class FieldInfo(BaseModel, FieldDetailHelper):
 
     field_name: str = Field(required=True, min_length=1, max_length=64, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
     field_type: str = Field(required=True, min_length=1, max_length=16, default=DEFAULT_TYPE,
                             choices=Choices(dict([(k, k) for k, _ in FIELD_TYPES.items()])))
+    field_factory: Optional[str] = Field(required=False, default=FIELD_FACTORIES[DEFAULT_FACTORY], choices=Choices(FIELD_FACTORIES))
+    field_alias: Optional[str] = Field(required=False, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
+    field_required: Optional[bool] = Field(required=False, default=False)
+    field_unique: Optional[bool] = Field(required=False, default=False)
     field_pattern: Optional[str] = Field(required=False)
     field_min_length: Optional[int] = Field(required=False)
     field_max_length: Optional[int] = Field(required=False)
-    field_alias: Optional[str] = Field(required=False, validate_pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$", default=None)
-    field_factory: Optional[str] = Field(required=False, default=FIELD_FACTORIES[DEFAULT_FACTORY], choices=Choices(FIELD_FACTORIES))
     field_gt: Optional[float] = Field(required=False, description="Greater than, applicable for numeric fields")
     field_lt: Optional[float] = Field(required=False, description="Less than, applicable for numeric fields")
     field_ge: Optional[float] = Field(required=False, description="Greater than or equal to, applicable for numeric fields")
     field_le: Optional[float] = Field(required=False, description="Less than or equal to, applicable for numeric fields")
-    field_decimal_places: Optional[int] = Field(required=False, ge=0, le=10, default=2)
-    field_required: Optional[bool] = Field(required=False, default=False)
-    field_unique: Optional[bool] = Field(required=False, default=False)
+    field_decimal_places: Optional[int] = Field(required=False, ge=0, le=10)
     field_default_value: Any = Field(required=False)
 
-    @field_validator("field_alias")
-    def validate_field_alias(cls, value, info: ValidationInfo) -> Optional[Any]:
-        data = info.data
-        pattern = cls.model_fields["field_alias"].json_schema_extra["validate_pattern"]
-        if "field_alias" in data and data["field_alias"] is not None:
-            print("DATAAAA", data["field_alias"])
-            if re.match(pattern, data["field_alias"]):
-                return data["field_alias"]
-            else:
-                raise ValueError(f"Field alias {value} should match pattern '{pattern}'")
-        return
-
     @field_validator("field_default_value")
-    def validate_field_value(cls, value, info: ValidationInfo) -> Optional[Any]:
+    def validate_field_default_value(cls, value, info: ValidationInfo) -> Optional[Any]:
         data = info.data
+        if not value:
+            return None
         if "field_type" not in data:
             raise ValueError("Field type is required")
         if not isinstance(value, FIELD_TYPES[data["field_type"]]):
             raise ValueError(f"Field Value {str(value)} should be of type {str(FIELD_TYPES[data['field_type']])}")
         _t = FIELD_TYPES[data["field_type"]]
-
-        if value is None:
-            if data["field_factory"] == "auto":
-                value = auto_field_factory(data["field_type"])
-                if not isinstance(value, _t):
-                    raise ValueError(f"Field Value {value} should be of type {_t}")
-            else:
-                if data["field_required"]:
-                    raise ValueError(f"Field Value cannot be Null")
-        elif _t == str:
+        if _t == str:
             if data.get("field_min_length") and len(value) < data["field_min_length"]:
                 raise ValueError(f"Field value {value} should be greater than {data['field_min_length']}")
             if data.get("field_max_length") and len(value) > data["field_max_length"]:
@@ -293,22 +269,24 @@ class FieldInfo(BaseModel, FieldDetailHelper):
 
     @field_validator("field_factory")
     def validate_field_factory(cls, value) -> str:
+        print("DEFAULTAA", cls.model_fields["field_factory"].default)
         if value is None:
-            value = FieldInfo.model_fields["field_factory"].default
+            value = cls.model_fields["field_factory"].default
         elif value not in FIELD_FACTORIES:
             raise ValueError(f"Field factory {value} is not supported")
         return value
 
     def __str__(self):
-        return f"FieldInfo(field_name={self.field_name}, field_type={self.field_type})"
+        return f"FieldInfo(field_name={self.field_name}, field_type={self.field_type}, field_factory={self.field_factory}, field_alias={self.field_alias}, field_required={self.field_required}, field_unique={self.field_unique}, field_pattern={self.field_pattern}, field_min_length={self.field_min_length}, field_max_length={self.field_max_length}, field_gt={self.field_gt}, field_lt={self.field_lt}, field_ge={self.field_ge}, field_le={self.field_le}, field_decimal_places={self.field_decimal_places}, field_default_value={self.field_default_value})"
 
 print("FIELDSSSS", FieldInfo.model_fields)
+
 
 class TableInfo(BaseModel, FieldDetailHelper):
     model_config = ConfigDict(validate_assignment=True)
 
     table_name: str = Field(pattern="^[a-zA-Z][a-zA-Z0-9_]*$", min_length=1, max_length=64)
-    table_fields: Optional[Sequence[FieldInfo]]
+    table_fields: Optional[List[FieldInfo]]
 
     def __str__(self):
         return f"TableInfo(table_name={self.table_name}, table_columns={self.table_fields})"
@@ -316,8 +294,6 @@ class TableInfo(BaseModel, FieldDetailHelper):
 
 DATA_SOURCE_TYPES = {
     "mysql": "mysql",
-    "mssql": "mssql",
-    "sqlite": "sqlite",
     "postgresql": "postgresql",
     "oracle": "oracle",
 }
@@ -382,3 +358,6 @@ def json_schema(to_path: str = "./schema"):
     for schema in schema_sources:
         with open(to_path + f"/{schema['title']}.json", "w+") as f:
             f.write(json.dumps(schema, indent=2))
+
+
+json_schema()

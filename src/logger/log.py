@@ -9,6 +9,7 @@ class CustomFormatter(logging.Formatter):
     def __init__(self, fmt, *args, theme=None, **kwargs):
         self.theme = theme
         self.fmt = fmt
+        self._temp_fmt = fmt
         if theme:
             self.formats = {
                 logging.DEBUG: theme.debug(fmt),

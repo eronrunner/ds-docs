@@ -1,0 +1,60 @@
+{
+  "properties": {
+    "ds_name": {
+      "maxLength": 32,
+      "minLength": 2,
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "title": "Ds Name",
+      "type": "string"
+    },
+    "ds_type": {
+      "choices": {
+        "choices": {
+          "mysql": "mysql",
+          "oracle": "oracle",
+          "postgresql": "postgresql"
+        }
+      },
+      "maxLength": 32,
+      "minLength": 1,
+      "title": "Ds Type",
+      "type": "string"
+    },
+    "ds_host": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Ds Host",
+      "type": "string"
+    },
+    "ds_port": {
+      "field_type": "int",
+      "maximum": 65535,
+      "minimum": 0,
+      "title": "Ds Port",
+      "type": "integer"
+    },
+    "ds_user": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_]*$",
+      "title": "Ds User",
+      "type": "string"
+    },
+    "ds_password": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Ds Password",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ds_name",
+    "ds_type",
+    "ds_host",
+    "ds_port",
+    "ds_user",
+    "ds_password"
+  ],
+  "title": "DataSourceInfo",
+  "type": "object"
+}

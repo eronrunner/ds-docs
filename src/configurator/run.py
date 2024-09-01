@@ -1,6 +1,5 @@
 import json
 import re
-import signal
 import sys
 from functools import wraps
 from typing import Sequence, Tuple, List, Optional, Mapping, Any
@@ -10,16 +9,19 @@ import questionary
 from click import HelpFormatter, Abort
 from click_help_colors import HelpColorsGroup, HelpColorsCommand
 from pydantic import ValidationError
+from pydantic_core import PydanticUndefined
 from questionary import Style, Choice, Question
 from questionary.constants import DEFAULT_KBI_MESSAGE
 
 from src.configurator.configurator import (
     DatasourceInfoConfigurator,
     TableInfoConfigurator,
-    FieldInfoConfigurator,
+    FieldInfoConfigurator, RE_DATA_SOURCE_INFO, RE_TABLE_INFO,
 )
+from src.helpers.files import is_file, ls_all_files_in_directory
 from src.logger.log import Logger
 from src.model.meta import TableInfo
+from src.view.TableView import TableView
 
 logger: 'Logger'
 theme: 'Theme'
@@ -33,7 +35,6 @@ class CustomQuestion(Question):
         self, patch_stdout: bool = False, kbi_msg: str = DEFAULT_KBI_MESSAGE
     ) -> Any:
         try:
-            sys.stdout.flush()
             return self.unsafe_ask(patch_stdout)
         except KeyboardInterrupt as ex:
             raise ex
@@ -69,7 +70,7 @@ def theme_to_questionary_style(theme: 'Theme') -> 'Style':
         ('answer', style_to_string(theme._h2)),      # submitted answer text behind the question
         ('pointer', style_to_string(theme._h2)),     # pointer used in select and checkbox prompts
         ('highlighted', style_to_string(theme._warning)),  # pointed-at choice in select and checkbox prompts
-        ('selected', style_to_string(theme._h3)),         # style for a selected item of a checkbox
+        ('selected', style_to_string(theme._h2)),         # style for a selected item of a checkbox
         ('separator', style_to_string(theme._h2)),        # separator in lists
         ('instruction', style_to_string(theme._h3)),  # user instructions for select, rawselect, checkbox
         ('text', style_to_string(theme._normal)),                       # plain text
@@ -340,6 +341,7 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
     for field_name in unconfigured_fields:
         format_name = field_name.replace("_", " ").capitalize()
         _process_field(field_configurator, field_name, format_name)
+    global first_asked
     while True:
         if configured_fields:
             logger.info(f"Configured fields: {', '.join(configured_fields)}")
@@ -347,12 +349,14 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
             field_info = field_configurator.configure()
             table_configurator.add_table_field(field_info)
             configured_fields.append(field_info.field_name)
-            add_more = questionary.confirm(
+            add_more = CustomQuestion.instance(questionary.confirm(
                 "Do you want to add more another field?"
-                , default=True
-            ).ask()
+                , default=True,
+                style=custom_style_fancy
+            )).ask()
             if not add_more:
                 break
+            first_asked = True
             field_configurator = FieldInfoConfigurator()
 
         except (ValidationError, ValueError) as e:
@@ -360,7 +364,6 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
                 field_name = err["loc"][0]
                 format_name = field_name.replace("_", " ").capitalize()
                 _process_field_error(field_configurator, err, field_name, format_name)
-            global first_asked
             first_asked = False
         # except Exception as e:
         #     logger.error(f"Error: {e}")
@@ -398,7 +401,7 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
     instruction = configurator.get_hint(field_name)
     if choices:
         if is_optional:
-            choices["NOT SET"] = __NULL
+            choices["NOT SET"] = PydanticUndefined
         choices, first_choice = _build_choices(choices, default=default_value)
         question = questionary.select(
             f"Enter {display_name}: ",
@@ -409,7 +412,7 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
         )
     else:
         if is_optional:
-            placeholder = f"By default, set: {default_value}" if default_value else __NULL
+            placeholder = f"By default, set: {default_value}" if default_value else None
         else:
             placeholder = ""
         if is_hidden:
@@ -417,7 +420,7 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
                 f"Enter {display_name}: ",
                 instruction=instruction,
                 style=custom_style_fancy,
-                default=default_value if default_value else __NULL,
+                # default=default_value if default_value else __NULL,
                 placeholder=placeholder or "[Your input is hidden]"
             )
         else:
@@ -433,6 +436,7 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
         field_value = _process_field_info(configurator, field_name, question)
     else:
         field_value = question.ask()
+
     configurator.__getattribute__(f"set_{field_name}")(
         field_value.strip() if isinstance(field_value, str) else field_value
     )
@@ -443,14 +447,12 @@ def _process_field_info(configurator: 'Configurator', field_name: str, question:
     field_type_value = configurator.__getattribute__("field_type")
     if _should_be_asked(field_name, field_type_value):
         field_value = question.ask()
-        if field_value == __NULL:
-            field_value = None
     else:
         field_value = None
     return field_value
 
 
-_str_asked_fields = {"field_pattern", "field_min", "field_max"}
+_str_asked_fields = {"field_pattern", "field_min_length", "field_max_length"}
 _int_asked_fields = ("field_gt", "field_lt", "field_ge", "field_le", "field_decimal_places")
 _default_asked_fields = ("field_name", "field_type", "field_alias", "field_factory", "field_required", "field_unique", "field_default_value")
 
@@ -480,7 +482,7 @@ def configure_tables(ctx):
         configured_tables = []
         while True:
             if configured_tables:
-                logger.info(f"Configured tables: {', '.join(configured_tables)}")
+                logger.info(f"Configured tables: {theme.normal(', '.join(configured_tables))}")
             table_name = CustomQuestion.instance(questionary.text(
                 "Enter table name",
                 style=custom_style_fancy,
@@ -489,10 +491,11 @@ def configure_tables(ctx):
             table_info = ctx.invoke(configure_table.callback, table_name=table_name, export=False)
             tables.append(table_info.model_dump(by_alias=True))
             configured_tables.append(table_info.table_name)
-            add_more = questionary.confirm(
+            add_more = CustomQuestion.instance(questionary.confirm(
                 "Do you want to add more another table?"
-                , default=True
-            ).ask()
+                , default=True,
+                style=custom_style_fancy
+            )).ask()
             if not add_more:
                 break
         logger.info("Export tables info . . .")
@@ -508,6 +511,80 @@ def configure_tables(ctx):
 def _export(path, data, mode="w+"):
     with open(path, mode) as f:
         f.write(data)
+
+
+@run.command("load-ds-info", cls=CommandColor, help="Load data source info")
+@click.option("-p", "--source-path", help="Data source path", required=True)
+@click.pass_context
+@context_path(relative="Load data source info")
+def load_ds_info(ctx, source_path: str) -> 'DatasourceInfo':
+    ctx.ensure_object(dict)
+    try:
+        logger.info("Load data source info")
+        if is_file(source_path) and re.match(RE_DATA_SOURCE_INFO, source_path):
+            with open(source_path, "r") as f:
+                data = f.read()
+            ds_info_configurator = DatasourceInfoConfigurator().validate(data)
+            ds_info_configurator.configure()
+            table_view = ds_info_configurator.show_table()
+            questionary.print(f"Data Source: {ds_info_configurator.ds_name}", style=style_to_string(theme._h2))
+            questionary.print(table_view, style=style_to_string(theme._normal))
+        else:
+            for directory, filename in ls_all_files_in_directory(source_path):
+                if re.match(RE_DATA_SOURCE_INFO, filename):
+                    with open(f"{directory}/{filename}", "r") as file:
+                        data = file.read()
+                    ds_info_configurator = DatasourceInfoConfigurator().validate(data)
+                    ds_info_configurator.configure()
+                    table_view = ds_info_configurator.show_table()
+                    questionary.print(f"Data Source: {ds_info_configurator.ds_name}", style=style_to_string(theme._h2))
+                    questionary.print(table_view, style=style_to_string(theme._normal))
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise e
+
+
+@run.command("load-tables", cls=CommandColor, help="Load tables info")
+@click.option("-p", "--tables-path", help="Tables path", required=True)
+@click.pass_context
+@context_path(relative="Load tables info")
+def load_tables(ctx, tables_path: str) -> 'DatasourceInfo':
+    ctx.ensure_object(dict)
+    try:
+        logger.info("Load tables info")
+        if is_file(tables_path) and re.match(RE_TABLE_INFO, tables_path):
+            with open(tables_path, "r") as f:
+                data = f.read()
+            table_info_configurator = TableInfoConfigurator().validate(data)
+            table_info_configurator.configure()
+            table_view = table_info_configurator.show_table()
+            questionary.print(f"Table: {table_info_configurator.table_name}", style=style_to_string(theme._h2))
+            questionary.print(table_view, style=style_to_string(theme._normal))
+        else:
+            print("AAAAAAAAAAA")
+            data = {'table_name': 'category', 'table_fields': [{'field_name': 'id', 'field_type': 'integer', 'field_pattern': None, 'field_min_length': None, 'field_max_length': None, 'field_alias': None, 'field_factory': 'auto', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': True, 'field_unique': True, 'field_default_value': None}, {'field_name': 'name', 'field_type': 'text'
+, 'field_pattern': '', 'field_min_length': None, 'field_max_length': None, 'field_alias': None, 'field_factory': 'manual', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': True, 'field_unique': True, 'field_default_value': None}, {'field_name': 'description', 'field_type': 'text', 'field_pattern': '', 'field_min_length': None, 'field_max_length': None, 'field_alias': None, 'field_fa
+ctory': 'manual', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': False, 'field_
+unique': False, 'field_default_value': None}, {'field_name': 'category_id', 'field_type': 'integer', 'field_pattern': None, 'field_min_length': None, 'f
+ield_max_length': None, 'field_alias': None, 'field_factory': 'manual', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': False, 'field_unique': False, 'field_default_value': None}]}
+            # TableInfo(**data)
+            print("ENDDDDDDDDDDDD")
+            for directory, filename in ls_all_files_in_directory(tables_path):
+                if re.match(RE_TABLE_INFO, filename):
+                    with open(f"{directory}/{filename}", "r") as file:
+                        data = json.loads(file.read())
+                    for table in data:
+                        print("TABLEEEE", type(table), table)
+                        table_info_configurator = TableInfoConfigurator().validate(table)
+                        table_info_configurator.configure()
+                        table_view = table_info_configurator.show_table()
+                        questionary.print(f"Table: {table_info_configurator.table_name}", style=style_to_string(theme._h2))
+                        questionary.print(table_view, style=style_to_string(theme._normal))
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise e
 
 
 if __name__ == "__main__":
