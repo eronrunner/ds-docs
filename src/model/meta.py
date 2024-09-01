@@ -269,7 +269,6 @@ class FieldInfo(BaseModel, FieldDetailHelper):
 
     @field_validator("field_factory")
     def validate_field_factory(cls, value) -> str:
-        print("DEFAULTAA", cls.model_fields["field_factory"].default)
         if value is None:
             value = cls.model_fields["field_factory"].default
         elif value not in FIELD_FACTORIES:
@@ -278,8 +277,6 @@ class FieldInfo(BaseModel, FieldDetailHelper):
 
     def __str__(self):
         return f"FieldInfo(field_name={self.field_name}, field_type={self.field_type}, field_factory={self.field_factory}, field_alias={self.field_alias}, field_required={self.field_required}, field_unique={self.field_unique}, field_pattern={self.field_pattern}, field_min_length={self.field_min_length}, field_max_length={self.field_max_length}, field_gt={self.field_gt}, field_lt={self.field_lt}, field_ge={self.field_ge}, field_le={self.field_le}, field_decimal_places={self.field_decimal_places}, field_default_value={self.field_default_value})"
-
-print("FIELDSSSS", FieldInfo.model_fields)
 
 
 class TableInfo(BaseModel, FieldDetailHelper):
@@ -304,10 +301,10 @@ class DataSourceInfo(BaseModel, FieldDetailHelper):
 
     ds_name: str = Field(min_length=2, max_length=32, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
     ds_type: str = Field(min_length=1, max_length=32, choices=Choices(DATA_SOURCE_TYPES))
-    ds_host: str = Field(min_length=1, max_length=512)
-    ds_port: int = Field(field_type="int", ge=0, le=65535)
-    ds_user: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
-    ds_password: str = Field(min_length=1, max_length=512)
+    ds_host: Optional[str] = Field(min_length=0, max_length=512)
+    ds_port: Optional[int] = Field(ge=0, le=65535)
+    ds_user: Optional[str] = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z][a-zA-Z0-9_]*$")
+    ds_password: Optional[str] = Field(min_length=1, max_length=512)
 
     def __str__(self):
         return f"DataSourceInfo(ds_name={self.ds_name}, ds_type={self.ds_type}, ds_host={self.ds_host}, ds_port={self.ds_port}, ds_user={self.ds_user}, ds_password={self.ds_password})"

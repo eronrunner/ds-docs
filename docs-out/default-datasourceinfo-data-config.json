@@ -1,0 +1,8 @@
+{
+  "ds_name": "data",
+  "ds_type": "mysql",
+  "ds_host": null,
+  "ds_port": null,
+  "ds_user": null,
+  "ds_password": null
+}

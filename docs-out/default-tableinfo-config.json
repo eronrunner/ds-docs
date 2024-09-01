@@ -1,0 +1,75 @@
+[
+  {
+    "table_name": "category",
+    "table_fields": [
+      {
+        "field_name": "id",
+        "field_type": "integer",
+        "field_factory": "auto",
+        "field_alias": null,
+        "field_required": true,
+        "field_unique": true,
+        "field_pattern": null,
+        "field_min_length": null,
+        "field_max_length": null,
+        "field_gt": null,
+        "field_lt": null,
+        "field_ge": null,
+        "field_le": null,
+        "field_decimal_places": null,
+        "field_default_value": null
+      },
+      {
+        "field_name": "name",
+        "field_type": "text",
+        "field_factory": "manual",
+        "field_alias": null,
+        "field_required": true,
+        "field_unique": true,
+        "field_pattern": null,
+        "field_min_length": null,
+        "field_max_length": null,
+        "field_gt": null,
+        "field_lt": null,
+        "field_ge": null,
+        "field_le": null,
+        "field_decimal_places": null,
+        "field_default_value": null
+      },
+      {
+        "field_name": "description",
+        "field_type": "text",
+        "field_factory": "manual",
+        "field_alias": null,
+        "field_required": false,
+        "field_unique": false,
+        "field_pattern": null,
+        "field_min_length": null,
+        "field_max_length": null,
+        "field_gt": null,
+        "field_lt": null,
+        "field_ge": null,
+        "field_le": null,
+        "field_decimal_places": null,
+        "field_default_value": null
+      },
+      {
+        "field_name": "category_id",
+        "field_type": "integer",
+        "field_factory": "manual",
+        "field_alias": null,
+        "field_required": null,
+        "field_unique": null,
+        "field_pattern": null,
+        "field_min_length": null,
+        "field_max_length": null,
+        "field_gt": null,
+        "field_lt": null,
+        "field_ge": null,
+        "field_le": null,
+        "field_decimal_places": null,
+        "field_default_value": null
+      }
+    ]
+  }
+]

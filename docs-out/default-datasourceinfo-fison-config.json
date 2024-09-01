@@ -1,0 +1,8 @@
+{
+  "ds_name": "fison",
+  "ds_type": "postgresql",
+  "ds_host": "localhost",
+  "ds_port": 3000,
+  "ds_user": "username",
+  "ds_password": "username"
+}

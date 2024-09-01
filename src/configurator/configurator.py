@@ -4,9 +4,13 @@ import typing
 from typing import Any
 
 from pydantic_core import PydanticUndefined
+from tabulate import tabulate
 
 from src.model.meta import DataSourceInfo, TableInfo, FieldInfo, Choices, FIELD_TYPES
 from src.view.TableView import TableView
+from multipledispatch import dispatch
+
+from src.view.abstract import index_start_with_one
 
 NOT_SET = object()
 
@@ -33,6 +37,7 @@ class Configurator:
 
     model: 'BaseModel.__class__'  # type: ignore
     _obj: 'BaseModel'
+    data: dict
 
     @classmethod
     def get_metadata(cls, field_name: str) -> list[Any]:
@@ -103,6 +108,7 @@ class DatasourceInfoConfigurator(Configurator):
         self.ds_password = ds_password
         self._obj = None
 
+    @dispatch()
     def configure(self):
         self._obj = self.model(
             ds_name=self.ds_name,
@@ -112,6 +118,19 @@ class DatasourceInfoConfigurator(Configurator):
             ds_user=self.ds_user,
             ds_password=self.ds_password,
         )
+        self.data = self._obj.model_dump()
+        return self._obj
+
+    @dispatch(dict)
+    def configure(self, datasource_info: dict):
+        self._obj = self.model(**datasource_info)
+        self.data = datasource_info
+        self.ds_name = self._obj.ds_name
+        self.ds_type = self._obj.ds_type
+        self.ds_host = self._obj.ds_host
+        self.ds_port = self._obj.ds_port
+        self.ds_user = self._obj.ds_user
+        self.ds_password = self._obj.ds_password
         return self._obj
 
     def set_ds_name(self, name: str):
@@ -123,33 +142,23 @@ class DatasourceInfoConfigurator(Configurator):
         return self
 
     def set_ds_host(self, host: str):
-        self.ds_host = host
+        self.ds_host = host if host else None
         return self
 
-    def set_ds_port(self, port: str):
-        self.ds_port = port
+    def set_ds_port(self, port: int):
+        self.ds_port = int(port) if isinstance(port, (int, float, str)) else None
         return self
 
     def set_ds_user(self, user: str):
-        self.ds_user = user
+        self.ds_user = user if user else None
         return self
 
     def set_ds_password(self, password: str):
-        self.ds_password = password
+        self.ds_password = password if password else None
         return self
 
-    def extract_data_source_info(self, data_source_info: dict):
-        self.ds_name = data_source_info.get('ds_name')
-        self.ds_type = data_source_info.get('ds_type')
-        self.ds_host = data_source_info.get('ds_host')
-        self.ds_port = data_source_info.get('ds_port')
-        self.ds_user = data_source_info.get('ds_user')
-        self.ds_password = data_source_info.get('ds_password')
-        return self
-
-    def validate(self, json_raw: str):
-        self.model.model_validate_json(json_raw, strict=True)
-        self.extract_data_source_info(json.loads(json_raw))
+    def validate(self, json_data: dict):
+        self._obj = self.model(**json_data)
         return self
 
     def show_table(self, fmt="rounded_grid", show_index=False) -> str:
@@ -157,9 +166,14 @@ class DatasourceInfoConfigurator(Configurator):
         Table view of the DataSourceInfo object
         :return: String only, so want to show it, use a function to print it
         """
-        dict_data = self._obj.model_dump(by_alias=True) if self._obj else {}
-        view = TableView(list(dict_data.keys()), data=tuple(dict_data.values()))
-        return view.render(fmt=fmt, show_index=show_index)
+        if self._obj:
+            print(self.data)
+            view = TableView("keys", data=[self.data])
+            return view.render(fmt=fmt, show_index=show_index)
+
+    def __str__(self):
+        print(self.ds_host if self.ds_host is not None else "None", type(self.ds_host))
+        return f"DatasourceInfoConfigurator(ds_name={self.ds_name}, ds_type={self.ds_type}, ds_host={str(self.ds_host)}, ds_port={self.ds_port}, ds_user={self.ds_user}, ds_password={self.ds_password})"
 
 
 class TableInfoConfigurator(Configurator):
@@ -170,8 +184,18 @@ class TableInfoConfigurator(Configurator):
         self.table_name = table_name
         self.table_fields = table_fields
 
-    def configure(self):
+    @dispatch()
+    def configure(self) -> 'BaseModel':
         self._obj = self.model(table_name=self.table_name, table_fields=self.table_fields)
+        self.data = self._obj.model_dump()
+        return self._obj
+
+    @dispatch(dict)
+    def configure(self, table_info: dict) -> 'BaseModel':
+        self._obj = self.model(**table_info)
+        self.data = table_info
+        self.table_name = self._obj.table_name
+        self.table_fields = self._obj.table_fields
         return self._obj
 
     def set_table_name(self, name: str):
@@ -189,27 +213,22 @@ class TableInfoConfigurator(Configurator):
             self.table_fields = [field]
         return self
 
-    def extract_table_info(self, table_info: dict):
-        self.table_name = table_info.get('table_name')
-        self.table_fields = table_info.get('table_fields')
-        return self
-
     def validate(self, json_data: dict):
-        TableInfo(**json_data)
-        # json_data = json.loads(json_raw)
-        # self.table_name = json_data.get('table_name')
-        # self.table_fields = json_data.get('table_fields')
+        self.model(**json_data)
         return self
 
-    def show_table(self, fmt="rounded_grid", show_index=False) -> str:
+    def show_table(self, fmt="rounded_grid", show_index=False, show_details=True) -> str:
         """
         Table view of the TableInfo object
         :return: String only, so want to show it, use a function to print it
         """
         if self._obj:
-            dict_data = self._obj.model_dump(by_alias=True) if self._obj else {}
-            view = TableView(["No.", *dict_data.keys()], data=tuple(dict_data.values()))
-            return view.render(fmt=fmt, show_index=show_index)
+            view = TableView([*self.data.keys()], data=[[self.table_name, "|".join(map(lambda x: x.field_name, self._obj.table_fields))]])
+            table_view = view.render(fmt=fmt, show_index=False)
+            if (fields_data := self.data.get("table_fields")) and show_details:
+                field_view = TableView("keys", fields_data)
+                table_view += f"\n{field_view.render(fmt=fmt, show_index=index_start_with_one(field_view.data) if show_index else False)}"
+            return table_view
 
 
 class FieldInfoConfigurator(Configurator):
@@ -250,8 +269,9 @@ class FieldInfoConfigurator(Configurator):
         self.field_unique = field_unique
         self.field_default_value = field_default_value
 
+    @dispatch()
     def configure(self):
-        return FieldInfo(
+        self._obj = self.model(
             field_name=self.field_name,
             field_type=self.field_type,
             field_pattern=self.field_pattern,
@@ -268,6 +288,29 @@ class FieldInfoConfigurator(Configurator):
             field_unique=self.field_unique,
             field_default_value=self.field_default_value,
         )
+        self.data = self._obj.model_dump()
+        return self._obj
+
+    @dispatch(dict)
+    def configure(self, field_info: dict):
+        self._obj = self.model(**field_info)
+        self.data = field_info
+        self.field_name = self._obj.field_name
+        self.field_type = self._obj.field_type
+        self.field_pattern = self._obj.field_pattern
+        self.field_min_length = self._obj.field_min_length
+        self.field_max_length = self._obj.field_max_length
+        self.field_alias = self._obj.field_alias
+        self.field_factory = self._obj.field_factory
+        self.field_gt = self._obj.field_gt
+        self.field_lt = self._obj.field_lt
+        self.field_ge = self._obj.field_ge
+        self.field_le = self._obj.field_le
+        self.field_decimal_places = self._obj.field_decimal_places
+        self.field_required = self._obj.field_required
+        self.field_unique = self._obj.field_unique
+        self.field_default_value = self._obj.field_default_value
+        return self._obj
 
     def set_field_name(self, name: str):
         self.field_name = name
@@ -282,11 +325,11 @@ class FieldInfoConfigurator(Configurator):
         return self
 
     def set_field_min_length(self, min: int):
-        self.field_min_length = int(min) if isinstance(min, (int, float)) else None
+        self.field_min_length = int(min) if isinstance(min, (int, float, str)) else None
         return self
 
     def set_field_max_length(self, max: int):
-        self.field_max_length = int(max) if isinstance(max, (int, float)) else None
+        self.field_max_length = int(max) if isinstance(max, (int, float, str)) else None
         return self
 
     def set_field_alias(self, alias: str):
@@ -298,23 +341,23 @@ class FieldInfoConfigurator(Configurator):
         return self
 
     def set_field_gt(self, gt: float):
-        self.field_gt = float(gt) if isinstance(gt, (int, float)) else None
+        self.field_gt = float(gt) if isinstance(gt, (int, float, str)) else None
         return self
 
     def set_field_lt(self, lt: float):
-        self.field_lt = int(lt) if isinstance(lt, (int, float)) else None
+        self.field_lt = int(lt) if isinstance(lt, (int, float, str)) else None
         return self
 
     def set_field_ge(self, ge: float):
-        self.field_ge = int(ge) if isinstance(ge, (int, float)) else None
+        self.field_ge = int(ge) if isinstance(ge, (int, float, str)) else None
         return self
 
     def set_field_le(self, le: float):
-        self.field_le = int(le) if isinstance(le, (int, float)) else None
+        self.field_le = int(le) if isinstance(le, (int, float, str)) else None
         return self
 
     def set_field_decimal_places(self, decimal_places: int):
-        self.field_decimal_places = int(decimal_places) if isinstance(decimal_places, (int, float)) else None
+        self.field_decimal_places = int(decimal_places) if isinstance(decimal_places, (int, float, str)) else None
         return self
 
     def set_field_required(self, required: bool | str | int):
@@ -331,3 +374,12 @@ class FieldInfoConfigurator(Configurator):
             default_value = _type(default_value)
         self.field_default_value = default_value
         return self
+
+    def show_table(self, fmt="rounded_grid", show_index=False) -> str:
+        """
+        Table view of the FieldInfo object
+        :return: String only, so want to show it, use a function to print it
+        """
+        if self._obj:
+            view = TableView("keys", data=self.data)
+            return view.render(fmt=fmt, show_index=show_index)

@@ -26,7 +26,6 @@ from src.view.TableView import TableView
 logger: 'Logger'
 theme: 'Theme'
 custom_style_fancy: 'Style'
-first_asked = True
 
 
 class CustomQuestion(Question):
@@ -88,7 +87,7 @@ def context_path(relative=""):
             ctx = args[0]
             ctx.ensure_object(dict)
             if "path" not in ctx.obj:
-                ctx.obj["path"] = ["Datasource docs"]
+                ctx.obj["path"] = [relative]
             rs = func(*args, **kwargs)
             if ctx.invoked_subcommand:
                 ctx.obj["path"].append(globals()[ctx.invoked_subcommand.replace("-", "_")].callback.context_path or ctx.invoked_subcommand)
@@ -244,42 +243,29 @@ _HIDDEN_FIELDS = {"ds_password"}
 
 @run.command("configure-ds", cls=CommandColor, help="Configure data source")
 @click.option("--data-source-name", help="Data source name", required=True, default=None)
-@click.option("--data-source-type", help="Data source type", default="")
-@click.option("--data-source-host", help="Data source host", default="")
-@click.option("--data-source-port", help="Data source port", default="")
-@click.option("--data-source-user", help="Data source user", default="")
-@click.option("--data-source-password", help="Data source password", default="")
 @click.pass_context
 @context_path(relative="Configure data source")
 def configure_ds(
     ctx,
     data_source_name,
-    data_source_type,
-    data_source_host,
-    data_source_port,
-    data_source_user,
-    data_source_password
 ):
     """
     Configure data source
     """
     ctx.ensure_object(dict)
     data_source_info_configurator = DatasourceInfoConfigurator()
-    (
-        data_source_info_configurator.set_ds_name(data_source_name)
-        .set_ds_type(data_source_type)
-        .set_ds_host(data_source_host)
-        .set_ds_port(data_source_port)
-        .set_ds_user(data_source_user)
-        .set_ds_password(data_source_password)
-    )
+    data_source_info_configurator.set_ds_name(data_source_name)
+    unconfigured_fields = data_source_info_configurator.get_unconfigured_fields()
+    for field_name in unconfigured_fields:
+        format_name = field_name.replace("_", " ").capitalize()
+        _process_field(data_source_info_configurator, field_name, format_name)
     while True:
         try:
             data_source_info = data_source_info_configurator.configure()
             logger.info("Export data source info . . .")
             _export(
                 f"{ctx.obj['output']}/{ctx.obj['namespace']}-datasourceinfo-{data_source_name}-config.json",
-                data_source_info.model_dump_json(by_alias=True, indent=2),
+                data_source_info.model_dump_json(indent=2),
             )
             return
         except (ValidationError, ValueError) as e:
@@ -289,12 +275,10 @@ def configure_ds(
                     "_", " "
                 ).capitalize()
                 _process_field_error(data_source_info_configurator, err, field_name, format_name)
-            global first_asked
-            first_asked = False
 
 
 @run.command("configure-table", cls=CommandColor, help="Configure table")
-@click.option("--table-name", help="Table name", default=None)
+@click.option("--table-name", help="Table name", required=True)
 @click.pass_context
 @context_path(relative="Configure table")
 def configure_table(ctx, table_name, export=True) -> "TableInfo":
@@ -304,7 +288,12 @@ def configure_table(ctx, table_name, export=True) -> "TableInfo":
     # try:
     ctx.ensure_object(dict)
     table_info_configurator = TableInfoConfigurator()
-    table_info_configurator.set_table_name(table_name.strip()).set_table_fields(None)
+    table_info_configurator.set_table_name(table_name.strip())
+    table_info_configurator.set_table_name(table_name)
+    unconfigured_fields = table_info_configurator.get_unconfigured_fields()
+    for field_name in unconfigured_fields:
+        format_name = field_name.replace("_", " ").capitalize()
+        _process_field(table_info_configurator, field_name, format_name)
     while True:
         try:
             table_info_configurator.configure()
@@ -314,8 +303,7 @@ def configure_table(ctx, table_name, export=True) -> "TableInfo":
                 field_name = err["loc"][0]
                 format_name = field_name.replace("_", " ").capitalize()
                 _process_field_error(table_info_configurator, err, field_name, format_name)
-        global first_asked
-        first_asked = False
+
     # Configure fields
     configured_fields = _configure_fields(ctx, table_info_configurator)
     if configured_fields:
@@ -325,7 +313,7 @@ def configure_table(ctx, table_name, export=True) -> "TableInfo":
         logger.info("Export table info . . .")
         _export(
             f"{ctx.obj['output']}/{ctx.obj['namespace']}-tableinfo-{table_name}-config.json",
-            table_info.model_dump_json(by_alias=True, indent=2),
+            table_info.model_dump_json(indent=2),
             "w+",
         )
     return table_info
@@ -341,7 +329,6 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
     for field_name in unconfigured_fields:
         format_name = field_name.replace("_", " ").capitalize()
         _process_field(field_configurator, field_name, format_name)
-    global first_asked
     while True:
         if configured_fields:
             logger.info(f"Configured fields: {', '.join(configured_fields)}")
@@ -356,7 +343,6 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
             )).ask()
             if not add_more:
                 break
-            first_asked = True
             field_configurator = FieldInfoConfigurator()
 
         except (ValidationError, ValueError) as e:
@@ -364,7 +350,7 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
                 field_name = err["loc"][0]
                 format_name = field_name.replace("_", " ").capitalize()
                 _process_field_error(field_configurator, err, field_name, format_name)
-            first_asked = False
+
         # except Exception as e:
         #     logger.error(f"Error: {e}")
     return configured_fields
@@ -372,12 +358,8 @@ def _configure_fields(ctx, table_configurator) -> list[str]:
 
 def _process_field_error(configurator: 'Configurator', err: dict, field_name: str, display_name: str = "") -> Any:
     choices = configurator.get_choices(field_name)
-    if not first_asked and err['msg']:
-        logger.error(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}")
+    logger.error(f"{display_name}, {err['msg'] if not choices else str(list(choices.keys()))}")
     return _process_field(configurator, field_name, display_name)
-
-
-__NULL = "__NULL"
 
 
 def _build_choices(choices: dict, default: str = None):
@@ -435,7 +417,8 @@ def _process_field(configurator: 'Configurator', field_name: str, display_name: 
     if isinstance(configurator, FieldInfoConfigurator):
         field_value = _process_field_info(configurator, field_name, question)
     else:
-        field_value = question.ask()
+        field_value = question.ask() or None
+        print("FIELD VALUE", type(field_value), field_value)
 
     configurator.__getattribute__(f"set_{field_name}")(
         field_value.strip() if isinstance(field_value, str) else field_value
@@ -489,7 +472,7 @@ def configure_tables(ctx):
                 instruction=TableInfoConfigurator().get_hint("table_name"),
             )).ask()
             table_info = ctx.invoke(configure_table.callback, table_name=table_name, export=False)
-            tables.append(table_info.model_dump(by_alias=True))
+            tables.append(table_info.model_dump())
             configured_tables.append(table_info.table_name)
             add_more = CustomQuestion.instance(questionary.confirm(
                 "Do you want to add more another table?"
@@ -513,6 +496,14 @@ def _export(path, data, mode="w+"):
         f.write(data)
 
 
+def _show_ds_table(ds_info: dict):
+    ds_info_configurator = DatasourceInfoConfigurator().validate(ds_info)
+    ds_info_configurator.configure(ds_info)
+    table_view = ds_info_configurator.show_table()
+    questionary.print(f"Data Source: {ds_info_configurator.ds_name}", style=style_to_string(theme._h2))
+    questionary.print(table_view, style=style_to_string(theme._normal))
+
+
 @run.command("load-ds-info", cls=CommandColor, help="Load data source info")
 @click.option("-p", "--source-path", help="Data source path", required=True)
 @click.pass_context
@@ -522,23 +513,15 @@ def load_ds_info(ctx, source_path: str) -> 'DatasourceInfo':
     try:
         logger.info("Load data source info")
         if is_file(source_path) and re.match(RE_DATA_SOURCE_INFO, source_path):
-            with open(source_path, "r") as f:
-                data = f.read()
-            ds_info_configurator = DatasourceInfoConfigurator().validate(data)
-            ds_info_configurator.configure()
-            table_view = ds_info_configurator.show_table()
-            questionary.print(f"Data Source: {ds_info_configurator.ds_name}", style=style_to_string(theme._h2))
-            questionary.print(table_view, style=style_to_string(theme._normal))
+            with open(source_path, "r") as file:
+                data = json.loads(file.read())
+            _show_ds_table(data)
         else:
             for directory, filename in ls_all_files_in_directory(source_path):
                 if re.match(RE_DATA_SOURCE_INFO, filename):
                     with open(f"{directory}/{filename}", "r") as file:
-                        data = file.read()
-                    ds_info_configurator = DatasourceInfoConfigurator().validate(data)
-                    ds_info_configurator.configure()
-                    table_view = ds_info_configurator.show_table()
-                    questionary.print(f"Data Source: {ds_info_configurator.ds_name}", style=style_to_string(theme._h2))
-                    questionary.print(table_view, style=style_to_string(theme._normal))
+                        data = json.loads(file.read())
+                    _show_ds_table(data)
 
     except Exception as e:
         logger.error(f"Error: {e}")
@@ -554,31 +537,23 @@ def load_tables(ctx, tables_path: str) -> 'DatasourceInfo':
     try:
         logger.info("Load tables info")
         if is_file(tables_path) and re.match(RE_TABLE_INFO, tables_path):
-            with open(tables_path, "r") as f:
-                data = f.read()
+            with open(tables_path, "r") as file:
+                data = json.loads(file.read())
             table_info_configurator = TableInfoConfigurator().validate(data)
-            table_info_configurator.configure()
-            table_view = table_info_configurator.show_table()
+            table_info_configurator.configure(data)
+            table_view = table_info_configurator.show_table(show_index=True)
             questionary.print(f"Table: {table_info_configurator.table_name}", style=style_to_string(theme._h2))
             questionary.print(table_view, style=style_to_string(theme._normal))
         else:
-            print("AAAAAAAAAAA")
-            data = {'table_name': 'category', 'table_fields': [{'field_name': 'id', 'field_type': 'integer', 'field_pattern': None, 'field_min_length': None, 'field_max_length': None, 'field_alias': None, 'field_factory': 'auto', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': True, 'field_unique': True, 'field_default_value': None}, {'field_name': 'name', 'field_type': 'text'
-, 'field_pattern': '', 'field_min_length': None, 'field_max_length': None, 'field_alias': None, 'field_factory': 'manual', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': True, 'field_unique': True, 'field_default_value': None}, {'field_name': 'description', 'field_type': 'text', 'field_pattern': '', 'field_min_length': None, 'field_max_length': None, 'field_alias': None, 'field_fa
-ctory': 'manual', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': False, 'field_
-unique': False, 'field_default_value': None}, {'field_name': 'category_id', 'field_type': 'integer', 'field_pattern': None, 'field_min_length': None, 'f
-ield_max_length': None, 'field_alias': None, 'field_factory': 'manual', 'field_gt': None, 'field_lt': None, 'field_ge': None, 'field_le': None, 'field_decimal_places': None, 'field_required': False, 'field_unique': False, 'field_default_value': None}]}
-            # TableInfo(**data)
-            print("ENDDDDDDDDDDDD")
+
             for directory, filename in ls_all_files_in_directory(tables_path):
                 if re.match(RE_TABLE_INFO, filename):
                     with open(f"{directory}/{filename}", "r") as file:
                         data = json.loads(file.read())
                     for table in data:
-                        print("TABLEEEE", type(table), table)
                         table_info_configurator = TableInfoConfigurator().validate(table)
-                        table_info_configurator.configure()
-                        table_view = table_info_configurator.show_table()
+                        table_info_configurator.configure(table)
+                        table_view = table_info_configurator.show_table(show_index=True)
                         questionary.print(f"Table: {table_info_configurator.table_name}", style=style_to_string(theme._h2))
                         questionary.print(table_view, style=style_to_string(theme._normal))
 
